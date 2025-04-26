@@ -1,0 +1,463 @@
+# Your Task: Worktime Focussed Frontend for Timr.com
+
+## Main Guideline
+
+If something does not work,
+1. novice programmers add corrective code.
+2. However, expert programmers remove defective code!
+
+Make sure you show that you're an expert programmer!
+
+## Task Overview
+
+Please create an alternative web frontend for the timetracking service Timr.com.
+
+Use Python as the implementation language and the Timr.com REST API (see below) to interface with the service.
+
+Our company's Timr.com ID is "ohrnerit". This should be configurable in a config file, but cannot be changed in the web frontend itself.
+
+Timr.com tracks times separately as work times and project times, while the work time is the time you're actually present at work, while the project times indicate from when to when you worked on a specific "task".
+
+We're only really interested in the precise start and end times of the work times, and the pause duration (in minutes) in this work time. For project times within these work times, we really only need to know their duration, however the Timr.com concept requires also each project time to have a start and end time. This is unneccessarily complicated for employees who only want to enter how long they worked on each task, and don't need to specify when exactly they worked on what during their work time.
+
+## Task Details
+
+So create an elegant an modern looking web interface which allows:
+* It shall be accessible and easily work both when using it only with the keyboard, and also with a combination of mouse and keyboard.
+* It allows the user to create and edit one or more work times for a day, and optionally specify the pause duration in a convenient way.
+* It then easily allows to fill the work time with project time entries, where the user only needs to specify how long she worked on which task.
+    * Note that this does NOT correspond to Timr's internal data model! Timr.com treats working times and project times completely separately. You need to establish the relation between both yourself using the respective start and end times. There can be cases of inconsistent data in Timr (overlapping work times or project times starting in one work time and ending outside of any work time or within another work time) which need to be handled gracefully. (You're allowed to sanitize such cases by adjusting the work times not to overlap, and the project times to properly fall into a single work time slot.)
+    * The task can be selected using an incremental typing search if at least three characters have been entered.
+    * In addition, the most recent 10 used tasks (unique, sorted by title) should also always be easily accessible.
+    * Internally, sort the tasks by their internal task ID and create work time entries for them by assigning the work time start time to the first task's project time, compute the end time by adding the duration, use this as the start time of the second task's work time entry, compute this work time's end time by adding this second entries duration, and so on.
+* Always indicate a work time's remaining time which is not yet assigned to task / project time entries so the user knows how much time still needs to be assigned.
+* Provide an easy way to assign the remaining unassigned time to a task / project time entry within this work time, or to extend an existing entry such that the remaining time in the current work time entry is used up.
+
+## Requested Development Procedure
+
+1. Please start by creating a Timr.com API Python module which provides basic features like authentication / login, querying and modifying working times and project times, and querying tasks. **Important:** NEVER modify or delete Tasks!
+2. Create a test class to properly test this Python API client module. I have test credentials for Timr.com which I will provide for this purpose if you ask.
+    1. Make sure to properly structure the test class(es) - do not just at a whim create new test classes and abandon previous ones. Instead make sure that you only create the test classes necessary and don't duplicate code and functionality!
+    2. Check twice that you are really testing production code! I have seen you write tests in which you just created Mock objects and then analyzed the structure OF THESE MOCK OBJECTS you created yourself! This does not make any sense at all! Even if you're sure the test makes sense, cross check again if if really tests what you intend to test!
+    3. Make sure that all API client methods are properly tested and work successfully.
+3. Only after the API client module is done and the tests prove it works reliably, start creating the web application as described above.
+    * If you need to make adjustments to the API client module, make sure to update the tests as well to keep full test coverage, and make sure the tests work.
+    * Also at this point, make sure that you're actually testing what's intended to be tested! So make sure you're actually testing production code functionality, and don't write test code which only tests itself.
+
+# Timr.com REST API Overview
+
+## timr API  ```  0.2.1  ```    ``` OAS 3.0 ```
+
+timr API for time tracking
+
+[Contact the developer](mailto:bernhard.danecker@troii.com)
+
+[Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0.html)
+
+Servers
+
+https://api.timr.com/v0.2/
+
+Authorize
+
+### [Authentication](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1\#/Authentication)    Authentication related operations
+
+POST
+[/login](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Authentication/login)
+
+get auth token
+
+Request:
+
+("identifier" is the Timr.com company ID)
+
+```json
+{
+  "identifier": "string",
+  "login": "string",
+  "password": "string"
+}
+```
+
+Example Response:
+
+```json
+{
+  "token": "string",
+  "alias": "string",
+  "valid_until": "2021-07-16T09:20:00+01:00",
+  "user": {
+    "id": "string",
+    "firstname": "string",
+    "lastname": "string",
+    "fullname": "string",
+    "email": "user@example.com",
+    "employee_number": "string",
+    "external_id": "string"
+  }
+}
+```
+
+### [Working Time](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1\#/Working%20Time)    Working Time related operations
+
+GET
+[/working-times](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Working%20Time/fetchWorkingTimes)
+
+fetches Working Times
+
+POST
+[/working-times](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Working%20Time/createWorkingTime)
+
+create a Working Time
+
+GET
+[/working-times/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Working%20Time/getWorkingTime)
+
+gets a single Working Time
+
+PATCH
+[/working-times/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Working%20Time/updateWorkingTime)
+
+updates a single Working Time
+
+DELETE
+[/working-times/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Working%20Time/deleteWorkingTime)
+
+deletes a single Working Time
+
+GET
+[/working-times:deleted](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Working%20Time/fetchDeletedWorkingTimes)
+
+Get deleted working times
+
+### [User](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1\#/User)
+
+GET
+[/users](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/User/fetchUsers)
+
+fetches Users
+
+POST
+[/users](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/User/createUser)
+
+create an User
+
+GET
+[/users/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/User/getUser)
+
+get a single user
+
+PATCH
+[/users/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/User/updateUser)
+
+updates a single User
+
+GET
+[/users/{id}/work-schedule-model](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/User/getUserWorkScheduleModel)
+
+get a User's Work-Schedule-Model
+
+### [TimeAccount](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1\#/TimeAccount)
+
+GET
+[/users/{id}/working-time-accounts/{date}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/TimeAccount/getUserWorkingTimeAccounts)
+
+get a user's working time accounts
+
+### [Work Schedule Model](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1\#/Work%20Schedule%20Model)
+
+GET
+[/work-schedule-models](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Work%20Schedule%20Model/fetchWorkScheduleModels)
+
+fetches Work Schedule Models
+
+GET
+[/work-schedule-models/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Work%20Schedule%20Model/getWorkScheduleModel)
+
+gets a single Work Schedule Model
+
+DELETE
+[/work-schedule-models/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Work%20Schedule%20Model/deleteWorkScheduleModel)
+
+deletes a single Work Schedule Model
+
+### [Project Time](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1\#/Project%20Time)
+
+GET
+[/project-times](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Project%20Time/fetchProjectTimes)
+
+fetches Project Times
+
+POST
+[/project-times](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Project%20Time/createProjectTime)
+
+create a Project Time
+
+GET
+[/project-times/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Project%20Time/getProjectTime)
+
+gets a single Project Time
+
+PATCH
+[/project-times/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Project%20Time/updateProjectTime)
+
+updates a single Project Time
+
+DELETE
+[/project-times/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Project%20Time/deleteProjectTime)
+
+deletes a single Project Time
+
+GET
+[/project-times:deleted](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Project%20Time/fetchDeletedProjectTimes)
+
+Get deleted project times
+
+### [Task](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1\#/Task)
+
+GET
+[/tasks](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Task/fetchTasks)
+
+fetches Tasks
+
+POST
+[/tasks](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Task/createTask)
+
+create a Task
+
+GET
+[/tasks/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Task/getTask)
+
+get a single task
+
+### [Working Time Request](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1\#/Working%20Time%20Request)
+
+GET
+[/working-time-requests](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Working%20Time%20Request/fetchWorkingTimeRequests)
+
+fetches Working Time Requests
+
+GET
+[/working-time-requests/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Working%20Time%20Request/getWorkingTimeRequest)
+
+gets a single Working Time Request
+
+DELETE
+[/working-time-requests/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Working%20Time%20Request/deleteWorkingTimeRequest)
+
+deletes a single Working Time Request
+
+### [Working Time Type](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1\#/Working%20Time%20Type)
+
+GET
+[/working-time-types](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Working%20Time%20Type/fetchWorkingTimeTypes)
+
+fetches Working Time Types
+
+GET
+[/working-time-types/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Working%20Time%20Type/getWorkingTimeType)
+
+gets a single Working Time Type
+
+DELETE
+[/working-time-types/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Working%20Time%20Type/deleteWorkingTimeType)
+
+deletes a single Working Time Type
+
+### [Holiday Calendar](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1\#/Holiday%20Calendar)
+
+GET
+[/holiday-calendars](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Holiday%20Calendar/fetchHolidayCalendars)
+
+fetches Holiday Calendars
+
+GET
+[/holiday-calendars/{id}](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Holiday%20Calendar/getHolidayCalendar)
+
+gets a single Holiday Calendar
+
+GET
+[/holiday-calendars/{id}/holidays](https://app.swaggerhub.com/apis-docs/troii/timr/0.2.1#/Holiday%20Calendar/fetchHolidays)
+
+fetches all Holidays of a specific Holiday Calendar
+
+#### Schemas
+
+Error
+
+Duration
+
+DurationType
+
+DateTime
+
+LocalDate
+
+LocalTime
+
+BreakTime
+
+BreakTimeUpdate
+
+BreakTimeManual
+
+BreakTimeOngoing
+
+BreakTimeAutomatic
+
+BreakTimeType
+
+UserPartial
+
+User
+
+UsersPage
+
+UsersSortColumn
+
+UserUpdate
+
+UserCreate
+
+HolidayCalendarPartial
+
+HolidayCalendarsPage
+
+HolidayCalendarsSortColumn
+
+Holiday
+
+HolidaysPage
+
+HolidaysSortColumn
+
+WorkingTimeAccounts
+
+TimeAccount
+
+Overtime
+
+Allowances
+
+WorkScheduleModelPartial
+
+WorkScheduleModel
+
+WorkScheduleModelsPage
+
+WorkScheduleModelSortColumn
+
+Location
+
+Platform
+
+WorkingTimeStatus
+
+WorkScheduleModelType
+
+DailyWorkSchedule
+
+NormalWorkingTimes
+
+WorkingTimeRules
+
+WorkingTime
+
+WorkingTimesPage
+
+WorkingTimesSortColumn
+
+WorkingTimeUpdate
+
+WorkingTimeCreate
+
+WorkingTimeDeletedPartial
+
+WorkingTimesDeletedPage
+
+WorkingTimesDeletedSortColumn
+
+ProjectTimeStatus
+
+TaskPartial
+
+Task
+
+TasksPage
+
+TaskCreate
+
+TaskLocation
+
+TasksSortColumn
+
+BudgetPlanningType
+
+ProjectTime
+
+ProjectTimesPage
+
+ProjectTimesSortColumn
+
+ProjectTimeUpdate
+
+ProjectTimeCreate
+
+ProjectTimeDeletedPartial
+
+ProjectTimesDeletedPage
+
+ProjectTimesDeletedSortColumn
+
+WorkingTimeRequestStatus
+
+WorkingTimeRequest
+
+WorkingTimeRequestsPage
+
+WorkingTimeRequestsSortColumn
+
+WorkingTimeTypePartial
+
+WorkingTimeType
+
+DurationUnit
+
+WorkingTimeTypeCategory
+
+WorkingTimeTypeSubCategory
+
+RecordingModeUser
+
+WorkingTimeTypesPage
+
+WorkingTimeTypesSortColumn
+
+PagingInformation
+
+SortDirection
+
+AuthRequest
+
+AuthResponse
+
+## Additional Notes on Timr.com REST API
+
+Note that how to specify pauses in the work times is not well documented in the REST API spec.
+
+A working code snipped (albeit in Java) looks as follows:
+
+```java
+final List<Map<String, Object>> pauses = wtPauseDurationMnt == 0 ? List.of()
+        : List.of(Map.of("type", "manual", "duration_minutes", wtPauseDurationMnt));
+
+final Map<String, Object> newTimrWorkingTimeEntry = Map.of("user_id", TIMR_USER_ID_GUNTER, "start",
+        wtStartTime, "end", wtEndTime, "break_times", pauses, "duration_type", "minutes", "changed", true,
+        "notes", getClass().getName(), "status", "changeable", "working_time_type_id",
+        TIMR_UUID_WORKING_TIME_ARBEIT);
+try {
+    timrClient.createEntity(TimrJsonApiClient.WORKING_TIMES_ENDPOINT_NAME, newTimrWorkingTimeEntry);
+} catch (IOException | URISyntaxException e) {
+    throw new RuntimeException(e);
+}
+```
