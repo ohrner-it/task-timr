@@ -1,0 +1,515 @@
+{% extends "base.html" %} {% block content %} {% if user %}
+<!-- Main app interface when logged in -->
+<div class="row mb-4 align-items-center">
+    <div class="col-md-6">
+        <div class="d-flex align-items-center">
+            <div
+                class="btn-group me-3"
+                role="group"
+                aria-label="Date navigation"
+            >
+                <button
+                    id="prev-date"
+                    class="btn btn-outline-secondary"
+                    title="Previous day (Alt+←)"
+                >
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <button
+                    id="today"
+                    class="btn btn-outline-primary"
+                    title="Today (Alt+T)"
+                >
+                    Today
+                </button>
+                <button
+                    id="next-date"
+                    class="btn btn-outline-secondary"
+                    title="Next day (Alt+→)"
+                >
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
+            <h5 class="mb-0" id="date-display">Loading...</h5>
+            <!-- Hidden input to store the current date in YYYY-MM-DD format -->
+            <input type="hidden" id="date-input" value="{{ date }}" />
+        </div>
+    </div>
+    <div class="col-md-6 text-end">
+        <a 
+            href="https://{{ company_id }}.timr.com/" 
+            target="_blank" 
+            class="btn btn-outline-secondary me-2"
+            title="Open official Timr.com frontend"
+        >
+            <i class="bi bi-box-arrow-up-right me-1"></i> Official Timr
+        </a>
+        <button
+            id="new-working-time-btn"
+            class="btn btn-primary"
+            title="Add new working time (Alt+N)"
+        >
+            <i class="bi bi-plus-circle me-1"></i> Add Working Time
+        </button>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12" id="working-times-container">
+        <!-- Working times will be loaded here -->
+        <div class="text-center my-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading working times...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Working Time Modal -->
+<div
+    class="modal fade"
+    id="working-time-modal"
+    tabindex="-1"
+    aria-labelledby="working-time-modal-label"
+    aria-hidden="true"
+>
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="working-time-modal-label">
+                    Add Working Time
+                </h5>
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Close"
+                ></button>
+            </div>
+            <div class="modal-body">
+                <!-- Container for modal-specific alerts -->
+                <div class="modal-alerts mb-3"></div>
+
+                <div class="row">
+                    <!-- Left sidebar with shortcuts -->
+                    <div class="col-md-4">
+                        <div class="card border-light h-100">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="bi bi-keyboard me-2"></i>Shortcuts</h6>
+                            </div>
+                            <div class="card-body p-2">
+                                <div class="small">
+                                    <div class="mb-1"><kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> Navigate</div>
+                                    <div class="mb-1"><kbd>Ctrl+S</kbd> Save</div>
+                                    <div class="mb-1"><kbd>Esc</kbd> Close</div>
+                                    <div class="border-top pt-1 mt-1">
+                                        <strong>Time format:</strong><br>
+                                        <span class="text-muted">09:00, 17:30</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main form -->
+                    <div class="col-md-8">
+
+                <form id="working-time-form">
+                    <div class="mb-3">
+                        <label for="working-time-date" class="form-label"
+                            >Date</label
+                        >
+                        <input
+                            type="date"
+                            class="form-control"
+                            id="working-time-date"
+                            required
+                        />
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="working-time-start" class="form-label"
+                                >Start Time</label
+                            >
+                            <input
+                                type="time"
+                                class="form-control"
+                                id="working-time-start"
+                                required
+                            />
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="working-time-end" class="form-label"
+                                >End Time</label
+                            >
+                            <input
+                                type="time"
+                                class="form-control"
+                                id="working-time-end"
+                                required
+                            />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="working-time-type" class="form-label"
+                            >Working Time Type</label
+                        >
+                        <select
+                            class="form-select"
+                            id="working-time-type"
+                            required
+                            aria-describedby="working-time-type-help"
+                        >
+                            <option value="">Loading working time types...</option>
+                        </select>
+                        <div id="working-time-type-help" class="form-text">
+                            Select the type of working time. Only attendance time types are editable in Task Timr.
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="working-time-pause" class="form-label"
+                            >Break Duration (minutes)</label
+                        >
+                        <input
+                            type="number"
+                            class="form-control"
+                            id="working-time-pause"
+                            min="0"
+                            value="30"
+                            aria-describedby="working-time-pause-help"
+                        />
+                        <div id="working-time-pause-help" class="form-text">
+                            Standard break of 30 minutes for lunch.
+                        </div>
+                    </div>
+                </form>
+                    </div> <!-- End col-md-8 -->
+                </div> <!-- End row -->
+            </div>
+            <div class="modal-footer">
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-bs-dismiss="modal"
+                >
+                    Cancel
+                </button>
+                <button
+                    type="submit"
+                    form="working-time-form"
+                    class="btn btn-primary"
+                    title="Save working time (Ctrl+S)"
+                >
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Time Allocation Modal -->
+<div
+    class="modal fade"
+    id="time-allocation-modal"
+    tabindex="-1"
+    aria-labelledby="time-allocation-modal-label"
+    aria-hidden="true"
+>
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="time-allocation-modal-label">
+                    Add Time Allocation
+                </h5>
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Close"
+                ></button>
+            </div>
+            <div class="modal-body">
+                <!-- Container for modal-specific alerts -->
+                <div class="modal-alerts mb-3"></div>
+
+                <div class="row">
+                    <!-- Left sidebar with shortcuts -->
+                    <div class="col-md-3">
+                        <div class="card border-light h-100">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="bi bi-keyboard me-2"></i>Shortcuts</h6>
+                            </div>
+                            <div class="card-body p-2">
+                                <div class="small">
+                                    <div class="mb-1"><kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> Navigate</div>
+                                    <div class="mb-1"><kbd>↑</kbd>/<kbd>↓</kbd> Navigate tasks</div>
+                                    <div class="mb-1"><kbd>Enter</kbd> Select task</div>
+                                    <div class="mb-1"><kbd>Ctrl+0-9</kbd> Quick select</div>
+                                    <div class="mb-1"><kbd>Ctrl+S</kbd> Save</div>
+                                    <div class="mb-1"><kbd>Ctrl+Shift+S</kbd> Save & New</div>
+                                    <div class="mb-1"><kbd>Esc</kbd> Close</div>
+                                    <div class="border-top pt-1 mt-1">
+                                        <strong>Duration:</strong><br>
+                                        <span class="text-muted">2h 30m, 45m, 1.5h</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main form -->
+                    <div class="col-md-5">
+
+                <form id="time-allocation-form">
+                    <div class="mb-3">
+                        <label class="form-label">Task</label>
+
+                        <div
+                            id="selected-task-container"
+                            class="alert alert-info mb-2 d-none"
+                        >
+                            <div
+                                class="d-flex align-items-center justify-content-between"
+                            >
+                                <div>
+                                    Selected Task:
+                                    <span id="selected-task-name">None</span>
+                                    <input
+                                        type="hidden"
+                                        id="selected-task-id"
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    class="btn-close"
+                                    id="clear-selected-task"
+                                    aria-label="Clear selected task"
+                                ></button>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="task-search"
+                                placeholder="Search for a task (min 3 chars)..."
+                                aria-label="Search for a task"
+                            />
+                        </div>
+                        <div
+                            id="task-search-results"
+                            class="task-search-results shadow-sm"
+                        ></div>
+                        <div class="form-text">
+                            Type at least 3 characters to search for tasks.
+                        </div>
+                    </div>
+
+                    <!-- Recent Tasks Section - moved to sidebar -->
+
+                    <div class="mb-3">
+                        <label for="time-allocation-duration" class="form-label"
+                            >Duration</label
+                        >
+                        <div class="input-group">
+                            <button
+                                class="btn btn-outline-secondary"
+                                type="button"
+                                id="duration-decrease"
+                                aria-label="Decrease duration"
+                            >
+                                <i class="bi bi-dash"></i>
+                            </button>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="time-allocation-duration"
+                                placeholder="Enter minutes or use format like '2h 30m'"
+                                aria-label="Duration in minutes"
+                                value="60"
+                                required
+                            />
+                            <button
+                                class="btn btn-outline-secondary"
+                                type="button"
+                                id="duration-increase"
+                                aria-label="Increase duration"
+                            >
+                                <i class="bi bi-plus"></i>
+                            </button>
+                        </div>
+                        <div class="form-text">
+                            Enter minutes or use format like "1h 30m", "45m",
+                            "2.5h"
+                        </div>
+                        <div class="mt-2">
+                            <div
+                                class="btn-group"
+                                role="group"
+                                aria-label="Quick duration options"
+                            >
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    data-duration="15"
+                                >
+                                    15m
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    data-duration="30"
+                                >
+                                    30m
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    data-duration="60"
+                                >
+                                    1h
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    data-duration="120"
+                                >
+                                    2h
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    data-duration="240"
+                                >
+                                    4h
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    id="duration-max"
+                                    title="Use all remaining time"
+                                >
+                                    max
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+                    </div> <!-- End col-md-5 -->
+                    
+                    <!-- Right sidebar with recent tasks -->
+                    <div class="col-md-4">
+                        <div class="card border-light h-100">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">Recent Tasks</h6>
+                            </div>
+                            <div class="card-body p-2">
+                                <div id="recent-tasks-allocation">
+                                    <!-- Recent tasks will be loaded here -->
+                                    <div class="text-center text-muted small">
+                                        <div class="spinner-border spinner-border-sm" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <div class="mt-1">Loading...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div> <!-- End col-md-4 -->
+                </div> <!-- End row -->
+            </div>
+            <div class="modal-footer">
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-bs-dismiss="modal"
+                >
+                    Cancel
+                </button>
+                <button
+                    type="button"
+                    id="save-and-add-new-btn"
+                    class="btn btn-outline-primary"
+                    title="Save and add new time allocation (Ctrl+Shift+S)"
+                >
+                    Save and Add New
+                </button>
+                <button
+                    type="submit"
+                    form="time-allocation-form"
+                    class="btn btn-primary"
+                    title="Save time allocation (Ctrl+S)"
+                >
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+{% else %}
+<!-- Login form when not logged in -->
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Login to Timr.com</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('login') }}" method="post">
+                    <div class="mb-3">
+                        <label for="username" class="form-label"
+                            >Username or Email</label
+                        >
+                        <div class="input-group">
+                            <span class="input-group-text"
+                                ><i class="bi bi-person"></i
+                            ></span>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="username"
+                                name="username"
+                                required
+                                autofocus
+                            />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label"
+                            >Password</label
+                        >
+                        <div class="input-group">
+                            <span class="input-group-text"
+                                ><i class="bi bi-lock"></i
+                            ></span>
+                            <input
+                                type="password"
+                                class="form-control"
+                                id="password"
+                                name="password"
+                                required
+                            />
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        Login
+                    </button>
+                </form>
+            </div>
+            <div class="card-footer text-center text-muted">
+                <small
+                    >Connecting to Timr.com company ID: {{ company_id }}</small
+                >
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %} {% endblock %}

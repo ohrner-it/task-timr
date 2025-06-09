@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "task-timr"
+version = "1.0.0"
+description = "Task duration-focused alternative frontend to Timr.com"
+requires-python = ">=3.10"
+dependencies = [
+    "coverage>=7.8.0",
+    "email-validator>=2.2.0",
+    "flask>=3.1.1",
+    "gunicorn>=23.0.0",
+    "python-dotenv>=1.1.0",
+    "pytz>=2025.2",
+    "requests>=2.32.3",
+]
+
+[tool.setuptools]
+py-modules = ["app", "main", "timr_api", "config", "raw_timr_responses", "run_tests"]
+
+[tool.setuptools.packages.find]
+include = ["task_timr*"]
+exclude = ["tests*", "static*", "templates*", "attached_assets*"]
