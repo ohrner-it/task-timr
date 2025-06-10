@@ -326,6 +326,30 @@ class TestIncrementalUpdates(unittest.TestCase):
         self.mock_timr_api.create_project_time.assert_not_called()
         self.mock_timr_api.delete_project_time.assert_not_called()
 
+    def testapply_differential_updates_removes_duplicate_project_times(self):
+        """Duplicate project times for the same task should be merged."""
+        # Add a duplicate project time for task1
+        dup = {
+            "id": "pt3",
+            "start": "2025-04-01T12:00:00+00:00",
+            "end": "2025-04-01T13:00:00+00:00",
+            "task": {"id": "task1", "name": "Task 1"},
+        }
+        self.current_project_times.append(dup)
+        self.mock_timr_api._get_project_times_in_work_time.return_value = self.current_project_times
+
+        desired_tasks = [
+            UIProjectTime("task1", "Task 1", 120),
+            UIProjectTime("task2", "Task 2", 90),
+        ]
+
+        self.consolidator.apply_differential_updates(self.working_time, desired_tasks)
+
+        # The duplicate project time should be deleted
+        self.mock_timr_api.delete_project_time.assert_any_call("pt3")
+        # Both tasks require updates due to sorting
+        self.assertEqual(self.mock_timr_api.update_project_time.call_count, 2)
+
     def testapply_differential_updates_complex_scenario(self):
         """Test a complex scenario with create, update, and delete operations"""
         # Current state: task1 (2h), task2 (1.5h)
