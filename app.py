@@ -345,13 +345,6 @@ def create_working_time():
                     'New working time would overlap with an existing working time'
                 }), 400
 
-        # Validate break duration doesn't exceed working time duration
-        total_duration_minutes = int((end_dt - start_dt).total_seconds() / 60)
-        if pause_duration > total_duration_minutes:
-            return jsonify({
-                'error': f'Break time ({pause_duration} minutes) cannot exceed working time duration ({total_duration_minutes} minutes)'
-            }), 400
-
         # Create working time - pass datetime objects directly, API client will format them
         working_time = timr_api.create_working_time(
             start=start, end=end, pause_duration=pause_duration, working_time_type_id=working_time_type_id)
@@ -423,17 +416,6 @@ def update_working_time(working_time_id):
             if not current_working_time:
                 return jsonify({'error': 'Working time not found'}), 404
             ui_project_times = project_time_consolidator.get_ui_project_times(current_working_time)
-
-        # Validate break duration doesn't exceed working time duration
-        if start and end and pause_duration is not None:
-            start_dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
-            end_dt = datetime.fromisoformat(end.replace('Z', '+00:00'))
-            total_duration_minutes = int((end_dt - start_dt).total_seconds() / 60)
-            
-            if pause_duration > total_duration_minutes:
-                return jsonify({
-                    'error': f'Break time ({pause_duration} minutes) cannot exceed working time duration ({total_duration_minutes} minutes)'
-                }), 400
 
         # Update working time
         working_time = timr_api.update_working_time(
