@@ -108,6 +108,37 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         self.created_project_times.add(project_time_id)
         logger.debug(f"Tracking project time for cleanup: {project_time_id}")
 
+    def _immediate_cleanup(self):
+        """Perform immediate cleanup of all tracked data."""
+        cleanup_summary = {"working_times": 0, "project_times": 0, "errors": 0}
+        
+        # Delete project times first to avoid FK constraints
+        for pt_id in list(self.created_project_times):
+            try:
+                self.api.delete_project_time(pt_id)
+                self.created_project_times.discard(pt_id)
+                cleanup_summary["project_times"] += 1
+                logger.debug(f"Immediate cleanup deleted project time {pt_id}")
+            except TimrApiError as e:
+                cleanup_summary["errors"] += 1
+                logger.warning(f"Immediate cleanup failed for project time {pt_id}: {e}")
+        
+        # Delete working times
+        for wt_id in list(self.created_working_times):
+            try:
+                self.api.delete_working_time(wt_id)
+                self.created_working_times.discard(wt_id)
+                cleanup_summary["working_times"] += 1
+                logger.debug(f"Immediate cleanup deleted working time {wt_id}")
+            except TimrApiError as e:
+                cleanup_summary["errors"] += 1
+                logger.warning(f"Immediate cleanup failed for working time {wt_id}: {e}")
+        
+        if cleanup_summary["working_times"] > 0 or cleanup_summary["project_times"] > 0:
+            logger.info(f"Immediate cleanup: {cleanup_summary['working_times']} working times, "
+                       f"{cleanup_summary['project_times']} project times deleted. "
+                       f"{cleanup_summary['errors']} errors encountered.")
+
     def _get_or_create_working_time(self):
         """Get an existing test working time or create a new one."""
         if self.created_working_times:
@@ -412,6 +443,9 @@ class TimrAPIIntegrationTest(unittest.TestCase):
             # This is acceptable behavior - just verify the first project time still exists
             pt1_check = self.api.get_project_time(pt1["id"])
             self.assertEqual(pt1_check["id"], pt1["id"])
+        
+        # Immediate cleanup to prevent accumulation during timeout interruptions
+        self._immediate_cleanup()
 
     def test_14_project_times_outside_working_time(self):
         """Test how the API handles project times outside working time bounds.
@@ -448,6 +482,9 @@ class TimrAPIIntegrationTest(unittest.TestCase):
             logger.info("API allows project times ending after working time")
         except TimrApiError as e:
             logger.info(f"API rejected project time ending after working time: {e}")
+        
+        # Immediate cleanup to prevent accumulation during timeout interruptions
+        self._immediate_cleanup()
 
     def test_15_pagination_functionality(self):
         """Test centralized pagination implementation with cursor pagination.
@@ -527,6 +564,9 @@ class TimrAPIIntegrationTest(unittest.TestCase):
             # This is acceptable behavior - just verify the first working time still exists
             wt1_check = self.api.get_working_time(wt1["id"])
             self.assertEqual(wt1_check["id"], wt1["id"])
+        
+        # Immediate cleanup to prevent accumulation during timeout interruptions
+        self._immediate_cleanup()
 
 if __name__ == '__main__':
     unittest.main()
