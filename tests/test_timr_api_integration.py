@@ -248,5 +248,285 @@ class TimrAPIIntegrationTest(unittest.TestCase):
 
         logger.info(f"Created project time: {pt['id']}")
 
+    def test_07_get_tasks(self):
+        """Test getting tasks."""
+        # Get tasks (limit to first 10)
+        tasks = self.api.get_tasks()[:10]
+
+        # Verify we got at least one task
+        self.assertGreaterEqual(len(tasks), 1)
+
+        # Verify task structure
+        for task in tasks:
+            self.assertIn("id", task)
+            self.assertIn("name", task)
+
+    def test_08_search_tasks(self):
+        """Test searching for tasks."""
+        # Get tasks to find one to search for
+        tasks = self.api.get_tasks()[:10]
+        self.assertGreaterEqual(len(tasks), 1)
+
+        task = tasks[0]  # Use first task for search test
+
+        # Extract a search term from the task name (first 3 characters)
+        search_term = task["name"][:3]
+
+        # Search for tasks
+        search_results = self.api.get_tasks(search=search_term)
+
+        # Verify we got at least one result
+        self.assertGreaterEqual(len(search_results), 1)
+
+        # Verify the task we searched for is in the results
+        task_ids = [t.get("id") for t in search_results]
+        self.assertIn(task["id"], task_ids)
+
+    def test_09_get_project_times(self):
+        """Test getting project times."""
+        # Create a project time for testing if we don't have one
+        if not self.created_project_times:
+            self.test_06_create_project_time()
+
+        # Get project times for the test date
+        project_times = self.api.get_project_times(start_date=self.test_date,
+                                                   end_date=self.test_date,
+                                                   user_id=self.user_id)
+
+        # Verify we got at least one project time
+        self.assertGreaterEqual(len(project_times), 1)
+
+        # Verify at least one of our test project times is in the results
+        pt_ids = [pt.get("id") for pt in project_times]
+        test_pt_found = any(pt_id in pt_ids for pt_id in self.created_project_times)
+        self.assertTrue(test_pt_found, "At least one test project time should be found")
+
+    def test_10_update_project_time(self):
+        """Test updating a project time."""
+        # Create a project time for testing if we don't have one
+        if not self.created_project_times:
+            self.test_06_create_project_time()
+
+        pt_id = next(iter(self.created_project_times))
+        pt = self.api.get_project_time(pt_id)
+
+        # Prepare update data - extend by 30 minutes
+        end_dt = datetime.datetime.fromisoformat(pt["end"].replace('Z', '+00:00'))
+        new_end_dt = end_dt + datetime.timedelta(minutes=30)
+        new_end = new_end_dt.isoformat()
+
+        # Update project time
+        updated_pt = self.api.update_project_time(project_time_id=pt["id"],
+                                                  end=new_end)
+
+        # Verify project time was updated correctly
+        self.assertEqual(updated_pt["id"], pt["id"])
+        # Note: end time comparison is tricky due to timezone handling
+
+    def test_11_delete_project_time(self):
+        """Test deleting a project time."""
+        # Create a project time for testing
+        wt = self._get_or_create_working_time()
+        task = self._get_bookable_task()
+
+        start = wt["start"]
+        end_dt = datetime.datetime.fromisoformat(start.replace('Z', '+00:00')) + datetime.timedelta(minutes=30)
+        end = end_dt.isoformat()
+
+        pt = self.api.create_project_time(task_id=task["id"], start=start, end=end)
+        self._track_project_time(pt["id"])
+
+        # Delete project time
+        response = self.api.delete_project_time(pt["id"])
+
+        # Remove from test data since we deleted it
+        self.created_project_times.discard(pt["id"])
+
+        # Verify deletion
+        with self.assertRaises(TimrApiError):
+            self.api.get_project_time(pt["id"])
+
+    def test_12_delete_working_time(self):
+        """Test deleting a working time."""
+        # Create a working time specifically for deletion testing
+        start = f"{self.test_date_str}T10:00:00+00:00"
+        end = f"{self.test_date_str}T16:00:00+00:00"
+        pause_duration = 30
+
+        wt = self.api.create_working_time(start=start, end=end, pause_duration=pause_duration)
+        self._track_working_time(wt["id"])
+
+        # Delete working time
+        response = self.api.delete_working_time(wt["id"])
+
+        # Remove from test data since we deleted it
+        self.created_working_times.discard(wt["id"])
+
+        # Verify deletion
+        with self.assertRaises(TimrApiError):
+            self.api.get_working_time(wt["id"])
+
+    def test_13_overlapping_project_times(self):
+        """Test how the API handles overlapping project times.
+
+        This is an important test to understand the real API behavior regarding overlapping project times.
+        """
+        # Get a working time for testing
+        wt = self._get_or_create_working_time()
+
+        # Get a task for testing
+        task = self._get_bookable_task()
+
+        # Create first project time
+        start1 = wt["start"]
+        end1_dt = datetime.datetime.fromisoformat(start1.replace('Z', '+00:00')) + datetime.timedelta(hours=2)
+        end1 = end1_dt.isoformat()
+
+        pt1 = self.api.create_project_time(task_id=task["id"], start=start1, end=end1)
+        self._track_project_time(pt1["id"])
+
+        # Create second project time that overlaps with the first
+        start2_dt = datetime.datetime.fromisoformat(start1.replace('Z', '+00:00')) + datetime.timedelta(hours=1)
+        start2 = start2_dt.isoformat()
+        end2_dt = start2_dt + datetime.timedelta(hours=2)
+        end2 = end2_dt.isoformat()
+
+        # Try to create the overlapping project time
+        try:
+            pt2 = self.api.create_project_time(task_id=task["id"], start=start2, end=end2)
+            self._track_project_time(pt2["id"])
+
+            # If we get here, the API allowed overlapping project times!
+            logger.info("API allows overlapping project times")
+
+            # Verify both project times exist
+            pt1_check = self.api.get_project_time(pt1["id"])
+            pt2_check = self.api.get_project_time(pt2["id"])
+
+            self.assertEqual(pt1_check["id"], pt1["id"])
+            self.assertEqual(pt2_check["id"], pt2["id"])
+
+        except TimrApiError as e:
+            # If we get here, the API rejected the overlapping project time
+            logger.info(f"API rejected overlapping project time: {e}")
+            # This is acceptable behavior - just verify the first project time still exists
+            pt1_check = self.api.get_project_time(pt1["id"])
+            self.assertEqual(pt1_check["id"], pt1["id"])
+
+    def test_14_project_times_outside_working_time(self):
+        """Test how the API handles project times outside working time bounds.
+
+        This is an important test to understand the real API behavior regarding project times
+        that start before or end after their working time.
+        """
+        # Get a working time for testing
+        wt = self._get_or_create_working_time()
+
+        # Get a task for testing
+        task = self._get_bookable_task()
+
+        # Try to create a project time that starts before the working time
+        wt_start = datetime.datetime.fromisoformat(wt["start"].replace('Z', '+00:00'))
+        early_start = (wt_start - datetime.timedelta(hours=1)).isoformat()
+        early_end = wt_start.isoformat()
+
+        try:
+            early_pt = self.api.create_project_time(task_id=task["id"], start=early_start, end=early_end)
+            self._track_project_time(early_pt["id"])
+            logger.info("API allows project times starting before working time")
+        except TimrApiError as e:
+            logger.info(f"API rejected project time starting before working time: {e}")
+
+        # Try to create a project time that ends after the working time
+        wt_end = datetime.datetime.fromisoformat(wt["end"].replace('Z', '+00:00'))
+        late_start = wt_end.isoformat()
+        late_end = (wt_end + datetime.timedelta(hours=1)).isoformat()
+
+        try:
+            late_pt = self.api.create_project_time(task_id=task["id"], start=late_start, end=late_end)
+            self._track_project_time(late_pt["id"])
+            logger.info("API allows project times ending after working time")
+        except TimrApiError as e:
+            logger.info(f"API rejected project time ending after working time: {e}")
+
+    def test_15_pagination_functionality(self):
+        """Test centralized pagination implementation with cursor pagination.
+        
+        This test validates that the _request_paginated method correctly handles
+        Timr's cursor pagination and retrieves unique data on each page.
+        """
+        # Test pagination with tasks (usually has many results)
+        all_tasks = self.api.get_tasks()
+        
+        # Verify we got some tasks
+        self.assertGreater(len(all_tasks), 0, "Should retrieve at least one task")
+        
+        # Test that pagination is working by checking if we have unique IDs
+        task_ids = [task["id"] for task in all_tasks]
+        unique_task_ids = set(task_ids)
+        
+        self.assertEqual(
+            len(task_ids), 
+            len(unique_task_ids), 
+            "Pagination should not return duplicate task IDs"
+        )
+        
+        logger.info(f"Pagination test: Retrieved {len(all_tasks)} unique tasks")
+
+    def test_16_pagination_data_integrity(self):
+        """Test that pagination maintains data integrity and consistency."""
+        # Get working times with pagination
+        working_times = self.api.get_working_times(
+            start_date=self.test_date - datetime.timedelta(days=7),
+            end_date=self.test_date,
+            user_id=self.user_id
+        )
+        
+        # Verify data integrity
+        for wt in working_times:
+            self.assertIn("id", wt, "Working time should have an ID")
+            self.assertIn("start", wt, "Working time should have a start time")
+            self.assertIn("end", wt, "Working time should have an end time")
+        
+        logger.info(f"Data integrity test: {len(working_times)} working times validated")
+
+    def test_17_overlapping_working_times(self):
+        """Test how the API handles overlapping working times.
+
+        This is an important test to understand the real API behavior regarding overlapping working times.
+        """
+        # Create first working time
+        start1 = f"{self.test_date_str}T10:00:00+00:00"
+        end1 = f"{self.test_date_str}T14:00:00+00:00"
+
+        wt1 = self.api.create_working_time(start=start1, end=end1)
+        self._track_working_time(wt1["id"])
+
+        # Create second working time that overlaps with the first
+        start2 = f"{self.test_date_str}T12:00:00+00:00"  # Start in the middle of the first working time
+        end2 = f"{self.test_date_str}T16:00:00+00:00"  # End after the first working time
+
+        # Try to create the overlapping working time
+        try:
+            wt2 = self.api.create_working_time(start=start2, end=end2)
+            self._track_working_time(wt2["id"])
+
+            # If we get here, the API allowed overlapping working times!
+            logger.info("API allows overlapping working times")
+
+            # Verify both working times exist
+            wt1_check = self.api.get_working_time(wt1["id"])
+            wt2_check = self.api.get_working_time(wt2["id"])
+
+            self.assertEqual(wt1_check["id"], wt1["id"])
+            self.assertEqual(wt2_check["id"], wt2["id"])
+
+        except TimrApiError as e:
+            # If we get here, the API rejected the overlapping working time
+            logger.info(f"API rejected overlapping working time: {e}")
+            # This is acceptable behavior - just verify the first working time still exists
+            wt1_check = self.api.get_working_time(wt1["id"])
+            self.assertEqual(wt1_check["id"], wt1["id"])
+
 if __name__ == '__main__':
     unittest.main()
