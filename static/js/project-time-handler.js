@@ -475,27 +475,21 @@ async function saveTimeAllocation(event) {
         console.log('Request data:', JSON.stringify(requestData));
         console.log('Working time ID:', workingTimeId);
         
-        const response = await fetch(requestUrl, {
+        // Use the enhanced fetch wrapper with debugging context
+        const data = await fetchWithErrorHandling(requestUrl, {
             method: requestMethod,
             headers: {
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             },
             body: JSON.stringify(requestData),
+        }, {
+            operation: "save time allocation",
+            workingTimeId: workingTimeId,
+            taskId: taskId,
+            selectedTaskId: selectedTaskId,
+            duration: duration
         });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            let errorData;
-            try {
-                errorData = JSON.parse(errorText);
-            } catch (e) {
-                errorData = { error: `Server error (${response.status})` };
-            }
-            throw new Error(errorData.error || `HTTP ${response.status}: Failed to save time allocation`);
-        }
-
-        const data = await response.json();
 
         return data;
     };
