@@ -63,6 +63,9 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         # Test data tracking for cleanup - use sets to avoid duplicates
         cls.created_working_times = set()
         cls.created_project_times = set()
+        
+        # Note: No automatic cleanup of potentially leftover entries to protect user data
+        # Manual cleanup should be performed only when specifically needed
 
     @classmethod
     def tearDownClass(cls):
