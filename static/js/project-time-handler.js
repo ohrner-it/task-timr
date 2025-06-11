@@ -351,7 +351,13 @@ function handleUIProjectTimeResponse(data, workingTimeId) {
  *
  * @returns {Promise<Object>} - Response data
  */
-async function saveTimeAllocation() {
+async function saveTimeAllocation(event) {
+    // Prevent default form submission to keep modal open
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
     const form = document.getElementById("time-allocation-form");
     if (!form) return;
 
