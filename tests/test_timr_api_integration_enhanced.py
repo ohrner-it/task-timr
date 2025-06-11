@@ -99,7 +99,7 @@ class EnhancedTimrIntegrationTest(unittest.TestCase):
     def _track_working_time(self, working_time_id):
         """Track a working time for cleanup, avoiding duplicates."""
         if working_time_id not in self.test_working_times:
-            self.test_working_times.append(working_time_id)
+            self._track_working_time(working_time_id)
             logger.debug(f"Tracking working time for cleanup: {working_time_id}")
 
     def _track_project_time(self, project_time_id):
@@ -496,7 +496,7 @@ class EnhancedTimrIntegrationTest(unittest.TestCase):
                                           end=end,
                                           pause_duration=pause_duration)
 
-        self.test_working_times.append(wt["id"])
+        self._track_working_time(wt["id"])
         return wt
 
     def _find_bookable_task(self, tasks):
