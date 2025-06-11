@@ -430,46 +430,50 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         early_start = (wt_start - datetime.timedelta(hours=1)).isoformat()
         early_end = wt_start.isoformat()
 
-        early_pt_created = False
-        try:
-            early_pt = self.api.create_project_time(task_id=task["id"], start=early_start, end=early_end)
-            self._track_project_time(early_pt["id"])
-            early_pt_created = True
-            logger.info("API allows project times starting before working time")
-            
-            # Verify the project time was created with correct data
-            early_pt_check = self.api.get_project_time(early_pt["id"])
-            self.assertEqual(early_pt_check["id"], early_pt["id"])
-            self.assertEqual(early_pt_check["task"]["id"], task["id"])
-            
-        except TimrApiError as e:
-            logger.info(f"API rejected project time starting before working time: {e}")
-            # This is acceptable behavior
+        # Timr API allows project times outside working time bounds as they are independent
+        early_pt = self.api.create_project_time(task_id=task["id"], start=early_start, end=early_end)
+        self._track_project_time(early_pt["id"])
+        logger.info("Confirmed: API allows project times starting before working time")
+        
+        # Verify the project time was created with correct data
+        early_pt_check = self.api.get_project_time(early_pt["id"])
+        self.assertEqual(early_pt_check["id"], early_pt["id"])
+        self.assertEqual(early_pt_check["task"]["id"], task["id"])
+        self.assertTrue(early_pt_check["start"] < wt["start"], 
+                       "Project time should start before working time")
 
-        # Try to create a project time that ends after the working time
+        # Create a project time that ends after the working time
         wt_end = datetime.datetime.fromisoformat(wt["end"].replace('Z', '+00:00'))
         late_start = wt_end.isoformat()
         late_end = (wt_end + datetime.timedelta(hours=1)).isoformat()
 
-        late_pt_created = False
-        try:
-            late_pt = self.api.create_project_time(task_id=task["id"], start=late_start, end=late_end)
-            self._track_project_time(late_pt["id"])
-            late_pt_created = True
-            logger.info("API allows project times ending after working time")
-            
-            # Verify the project time was created with correct data
-            late_pt_check = self.api.get_project_time(late_pt["id"])
-            self.assertEqual(late_pt_check["id"], late_pt["id"])
-            self.assertEqual(late_pt_check["task"]["id"], task["id"])
-            
-        except TimrApiError as e:
-            logger.info(f"API rejected project time ending after working time: {e}")
-            # This is acceptable behavior
+        late_pt = self.api.create_project_time(task_id=task["id"], start=late_start, end=late_end)
+        self._track_project_time(late_pt["id"])
+        logger.info("Confirmed: API allows project times ending after working time")
+        
+        # Verify the project time was created with correct data
+        late_pt_check = self.api.get_project_time(late_pt["id"])
+        self.assertEqual(late_pt_check["id"], late_pt["id"])
+        self.assertEqual(late_pt_check["task"]["id"], task["id"])
+        self.assertTrue(late_pt_check["end"] > wt["end"], 
+                       "Project time should end after working time")
 
-        # Test completing - verify we tested boundary behavior
-        test_completed = early_pt_created or late_pt_created or True  # Always passes as we're testing API behavior
-        self.assertTrue(test_completed, "Boundary testing completed - API behavior documented")
+        # Create a project time that spans beyond both boundaries
+        span_start = (datetime.datetime.fromisoformat(wt["start"].replace('Z', '+00:00')) - 
+                     datetime.timedelta(minutes=30)).isoformat()
+        span_end = (wt_end + datetime.timedelta(minutes=30)).isoformat()
+        
+        span_pt = self.api.create_project_time(task_id=task["id"], start=span_start, end=span_end)
+        self._track_project_time(span_pt["id"])
+        logger.info("Confirmed: API allows project times spanning beyond working time boundaries")
+        
+        # Verify the spanning project time
+        span_pt_check = self.api.get_project_time(span_pt["id"])
+        self.assertEqual(span_pt_check["id"], span_pt["id"])
+        self.assertEqual(span_pt_check["task"]["id"], task["id"])
+        
+        # Final verification: all boundary tests should pass since Timr allows independence
+        self.assertTrue(True, "All boundary tests passed - Timr allows project times independent of working times")
 
     def test_15_pagination_functionality(self):
         """Test centralized pagination implementation with cursor pagination.
@@ -496,21 +500,61 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         logger.info(f"Pagination test: Retrieved {len(all_tasks)} unique tasks")
 
     def test_16_pagination_data_integrity(self):
-        """Test that pagination maintains data integrity and consistency."""
-        # Get working times with pagination
-        working_times = self.api.get_working_times(
-            start_date=self.test_date - datetime.timedelta(days=7),
-            end_date=self.test_date,
-            user_id=self.user_id
-        )
+        """Test that pagination maintains data integrity and returns different pages."""
+        # Test pagination manually to verify different pages contain different data
+        import copy
         
-        # Verify data integrity
-        for wt in working_times:
-            self.assertIn("id", wt, "Working time should have an ID")
-            self.assertIn("start", wt, "Working time should have a start time")
-            self.assertIn("end", wt, "Working time should have an end time")
+        # Make direct paginated requests to verify page differences
+        endpoint = "project-times"
+        params = {
+            "user_id": self.user_id,
+            "start_date": (self.test_date - datetime.timedelta(days=30)).strftime('%Y-%m-%d'),
+            "end_date": self.test_date.strftime('%Y-%m-%d')
+        }
         
-        logger.info(f"Data integrity test: {len(working_times)} working times validated")
+        # Get first page
+        page1_params = copy.deepcopy(params)
+        page1_params['limit'] = 50
+        page1_response = self.api._request("GET", endpoint, params=page1_params)
+        page1_data = page1_response.get('data', [])
+        
+        if len(page1_data) >= 50:  # Only test if we have enough data for pagination
+            # Get second page using page_token
+            page_token = page1_response.get('page_token')
+            if page_token:
+                page2_params = copy.deepcopy(params)
+                page2_params['limit'] = 50
+                page2_params['page_token'] = page_token
+                page2_response = self.api._request("GET", endpoint, params=page2_params)
+                page2_data = page2_response.get('data', [])
+                
+                # Verify pages contain different data
+                page1_ids = {item['id'] for item in page1_data}
+                page2_ids = {item['id'] for item in page2_data}
+                
+                self.assertGreater(len(page1_ids), 0, "First page should contain data")
+                self.assertGreater(len(page2_ids), 0, "Second page should contain data")
+                
+                # Critical test: pages should not contain duplicate items
+                overlap = page1_ids.intersection(page2_ids)
+                self.assertEqual(len(overlap), 0, 
+                    f"Pages should not contain duplicate items, but found {len(overlap)} overlapping IDs")
+                
+                logger.info(f"Pagination integrity verified: Page 1 has {len(page1_ids)} items, "
+                           f"Page 2 has {len(page2_ids)} items, no overlap")
+            else:
+                logger.info("No page_token returned - only one page of data available")
+        else:
+            logger.info(f"Insufficient data for pagination test ({len(page1_data)} items)")
+        
+        # Verify data structure integrity for any returned data
+        all_data = page1_data
+        for item in all_data:
+            self.assertIn("id", item, "Project time should have an ID")
+            self.assertIn("start", item, "Project time should have a start time")
+            self.assertIn("end", item, "Project time should have an end time")
+        
+        logger.info(f"Data integrity test: {len(all_data)} project times validated")
 
     def test_17_overlapping_working_times(self):
         """Test how the API handles overlapping working times.
