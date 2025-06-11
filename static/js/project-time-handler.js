@@ -253,12 +253,13 @@ function setupTimeAllocationFormListeners() {
     // Handle "Save and Add New" button
     const saveAndAddNewBtn = document.getElementById("save-and-add-new-btn");
     if (saveAndAddNewBtn) {
-        saveAndAddNewBtn.addEventListener("click", function () {
-            // Trigger form submission but mark it as "save and add new"
+        saveAndAddNewBtn.addEventListener("click", function (event) {
+            // Mark as "save and add new" and call the function directly
             const form = document.getElementById("time-allocation-form");
             if (form) {
                 form.dataset.saveAndAddNew = "true";
-                form.dispatchEvent(new Event("submit"));
+                // Call saveTimeAllocation directly instead of dispatching synthetic event
+                saveTimeAllocation(event);
             }
         });
     }
@@ -356,6 +357,12 @@ async function saveTimeAllocation(event) {
     if (event) {
         event.preventDefault();
         event.stopPropagation();
+        
+        // Prevent double submissions from synthetic events
+        if (event.isTrusted === false && event.type === 'submit') {
+            console.log('Ignoring synthetic submit event to prevent double submission');
+            return;
+        }
     }
     
     const form = document.getElementById("time-allocation-form");
