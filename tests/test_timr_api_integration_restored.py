@@ -108,37 +108,6 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         self.created_project_times.add(project_time_id)
         logger.debug(f"Tracking project time for cleanup: {project_time_id}")
 
-    def _immediate_cleanup(self):
-        """Perform immediate cleanup of all tracked data."""
-        cleanup_summary = {"working_times": 0, "project_times": 0, "errors": 0}
-        
-        # Delete project times first to avoid FK constraints
-        for pt_id in list(self.created_project_times):
-            try:
-                self.api.delete_project_time(pt_id)
-                self.created_project_times.discard(pt_id)
-                cleanup_summary["project_times"] += 1
-                logger.debug(f"Immediate cleanup deleted project time {pt_id}")
-            except TimrApiError as e:
-                cleanup_summary["errors"] += 1
-                logger.warning(f"Immediate cleanup failed for project time {pt_id}: {e}")
-        
-        # Delete working times
-        for wt_id in list(self.created_working_times):
-            try:
-                self.api.delete_working_time(wt_id)
-                self.created_working_times.discard(wt_id)
-                cleanup_summary["working_times"] += 1
-                logger.debug(f"Immediate cleanup deleted working time {wt_id}")
-            except TimrApiError as e:
-                cleanup_summary["errors"] += 1
-                logger.warning(f"Immediate cleanup failed for working time {wt_id}: {e}")
-        
-        if cleanup_summary["working_times"] > 0 or cleanup_summary["project_times"] > 0:
-            logger.info(f"Immediate cleanup: {cleanup_summary['working_times']} working times, "
-                       f"{cleanup_summary['project_times']} project times deleted. "
-                       f"{cleanup_summary['errors']} errors encountered.")
-
     def _get_or_create_working_time(self):
         """Get an existing test working time or create a new one."""
         if self.created_working_times:
