@@ -784,8 +784,11 @@ async function deleteTimeAllocation(taskId, workingTimeId) {
 
         return data;
     } catch (error) {
-        console.error("Error:", error);
+        // Enhanced error logging is already done in the try block via logApiError
         showAlert(`Error: ${error.message}`, "danger");
+        
+        // Log a summary to console as well for quick reference
+        console.error("Time allocation delete failed:", error.message);
 
         // Reset opacity
         if (timeAllocationItem) {
