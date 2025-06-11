@@ -17,7 +17,7 @@ import {
 } from './modules/time-utils.js';
 import { escapeHtml, extractTimeRangeFromWorkingTime } from './modules/dom-utils.js';
 import { saveExpandedState, getExpandedStates, findMostRecentlyExpandedWorkingTime } from './modules/state-management.js';
-import { logMessage, showAlert, debounce } from './modules/ui-utils.js';
+import { logMessage, showAlert, debounce, logApiError } from './modules/ui-utils.js';
 import { fetchWithErrorHandling, handleApiResponse } from './modules/error-handler.js';
 import { sortWorkingTimesLatestFirst, sortTasksAlphabetically } from './modules/sorting-utils.js';
 import { openTimeAllocationModal, openDistributeTimeModal, fetchUIProjectTimes, renderUIProjectTimes, renderTimeAllocationProgress } from './project-time-handler.js';
