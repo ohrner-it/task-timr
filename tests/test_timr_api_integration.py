@@ -99,13 +99,13 @@ class TimrAPIIntegrationTest(unittest.TestCase):
     def _track_working_time(self, working_time_id):
         """Track a working time for cleanup, avoiding duplicates."""
         if working_time_id not in self.test_working_times:
-            self.test_working_times.append(working_time_id)
+            self._track_working_time(working_time_id)
             logger.debug(f"Tracking working time for cleanup: {working_time_id}")
 
     def _track_project_time(self, project_time_id):
         """Track a project time for cleanup, avoiding duplicates."""
         if project_time_id not in self.test_project_times:
-            self.test_project_times.append(project_time_id)
+            self._track_project_time(project_time_id)
             logger.debug(f"Tracking project time for cleanup: {project_time_id}")
 
     def tearDown(self):
@@ -382,9 +382,8 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         # Create a working time for testing if we don't have one
         if not self.test_working_times:
             self.test_03_create_working_time()
-            wt_id = self.test_working_time["id"]
-        else:
-            wt_id = self.test_working_times[0]
+        
+        wt_id = self.test_working_times[0]
 
         # Delete working time
         response = self.api.delete_working_time(wt_id)
@@ -426,7 +425,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         pt1 = self.api.create_project_time(task_id=task["id"],
                                            start=start1,
                                            end=end1)
-        self.test_project_times.append(pt1["id"])
+        self._track_project_time(pt1["id"])
 
         # Create second project time that overlaps with the first
         start2_dt = start1_dt + datetime.timedelta(
@@ -440,7 +439,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
             pt2 = self.api.create_project_time(task_id=task["id"],
                                                start=start2,
                                                end=end2)
-            self.test_project_times.append(pt2["id"])
+            self._track_project_time(pt2["id"])
 
             # If we get here, the API allowed overlapping project times!
             logger.info("API allows overlapping project times")
@@ -503,7 +502,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
             early_pt = self.api.create_project_time(task_id=task["id"],
                                                     start=pt_start,
                                                     end=pt_end)
-            self.test_project_times.append(early_pt["id"])
+            self._track_project_time(early_pt["id"])
 
             # If we get here, the API allowed the early project time!
             logger.info(
@@ -545,7 +544,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
             late_pt = self.api.create_project_time(task_id=task["id"],
                                                    start=pt_start,
                                                    end=pt_end)
-            self.test_project_times.append(late_pt["id"])
+            self._track_project_time(late_pt["id"])
 
             # If we get here, the API allowed the late project time!
             logger.info("API allows project times ending after working time")
@@ -685,7 +684,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         end1 = f"{self.test_date_str}T14:00:00+00:00"
 
         wt1 = self.api.create_working_time(start=start1, end=end1)
-        self.test_working_times.append(wt1["id"])
+        self._track_working_time(wt1["id"])
 
         # Create second working time that overlaps with the first
         start2 = f"{self.test_date_str}T12:00:00+00:00"  # Start in the middle of the first working time
@@ -694,7 +693,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         # Try to create the overlapping working time
         try:
             wt2 = self.api.create_working_time(start=start2, end=end2)
-            self.test_working_times.append(wt2["id"])
+            self._track_working_time(wt2["id"])
 
             # If we get here, the API allowed overlapping working times!
             logger.info("API allows overlapping working times")
