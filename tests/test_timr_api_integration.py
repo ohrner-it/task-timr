@@ -70,23 +70,48 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         if not hasattr(cls, 'api') or not cls.api.token:
             return  # Skip if setup failed
 
+        cleanup_summary = {"working_times": 0, "project_times": 0, "errors": 0}
+
+        # Delete all test project times first (before working times to avoid FK constraints)
+        for pt_id in cls.test_project_times:
+            try:
+                cls.api.delete_project_time(pt_id)
+                logger.info(f"Deleted test project time {pt_id}")
+                cleanup_summary["project_times"] += 1
+            except TimrApiError as e:
+                logger.warning(f"Could not delete test project time {pt_id}: {e}")
+                cleanup_summary["errors"] += 1
+
         # Delete all test working times
         for wt_id in cls.test_working_times:
             try:
                 cls.api.delete_working_time(wt_id)
                 logger.info(f"Deleted test working time {wt_id}")
+                cleanup_summary["working_times"] += 1
             except TimrApiError as e:
-                logger.warning(
-                    f"Could not delete test working time {wt_id}: {e}")
+                logger.warning(f"Could not delete test working time {wt_id}: {e}")
+                cleanup_summary["errors"] += 1
 
-        # Delete all test project times (this may not be necessary if working times are deleted)
-        for pt_id in cls.test_project_times:
-            try:
-                cls.api.delete_project_time(pt_id)
-                logger.info(f"Deleted test project time {pt_id}")
-            except TimrApiError as e:
-                logger.warning(
-                    f"Could not delete test project time {pt_id}: {e}")
+        logger.info(f"Cleanup complete: {cleanup_summary['working_times']} working times, "
+                   f"{cleanup_summary['project_times']} project times deleted. "
+                   f"{cleanup_summary['errors']} errors encountered.")
+
+    def _track_working_time(self, working_time_id):
+        """Track a working time for cleanup, avoiding duplicates."""
+        if working_time_id not in self.test_working_times:
+            self.test_working_times.append(working_time_id)
+            logger.debug(f"Tracking working time for cleanup: {working_time_id}")
+
+    def _track_project_time(self, project_time_id):
+        """Track a project time for cleanup, avoiding duplicates."""
+        if project_time_id not in self.test_project_times:
+            self.test_project_times.append(project_time_id)
+            logger.debug(f"Tracking project time for cleanup: {project_time_id}")
+
+    def tearDown(self):
+        """Clean up after each individual test method if needed."""
+        # This allows individual test cleanup if a test fails midway
+        pass
 
     def test_01_login_success(self):
         """Test that login works correctly with valid credentials."""
@@ -117,7 +142,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
                                           pause_duration=pause_duration)
 
         # Track for cleanup
-        self.test_working_times.append(wt["id"])
+        self._track_working_time(wt["id"])
 
         # Verify working time was created correctly
         self.assertIn("id", wt)
@@ -154,7 +179,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         wt = self.api.create_working_time(start=start,
                                           end=end,
                                           pause_duration=pause_duration)
-        self.test_working_times.append(wt["id"])
+        self._track_working_time(wt["id"])
 
         # Prepare update data
         new_end = f"{self.test_date_str}T18:00:00+00:00"
@@ -235,7 +260,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         wt = self.api.create_working_time(start=start,
                                           end=end,
                                           pause_duration=pause_duration)
-        self.test_working_times.append(wt["id"])
+        self._track_working_time(wt["id"])
 
         # Get a task for testing
         tasks = self.api.get_tasks()[:10]
@@ -264,7 +289,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
                                           end=end)
 
         # Track for cleanup
-        self.test_project_times.append(pt["id"])
+        self._track_project_time(pt["id"])
 
         # Verify project time was created correctly
         self.assertIn("id", pt)
