@@ -754,8 +754,27 @@ def add_ui_project_time(working_time_id):
         })
 
     except (TimrApiError, ValueError) as e:
-        logger.error(f"Error in add_ui_project_time: {e}")
+        logger.error(f"Error in add_ui_project_time: {e}", extra={
+            'working_time_id': working_time_id,
+            'task_id': task_id,
+            'task_name': task_name,
+            'duration_minutes': duration_minutes,
+            'user_id': user.get('id') if user else None,
+            'request_data': data,
+            'error_type': type(e).__name__
+        })
         return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Unexpected error in add_ui_project_time: {e}", extra={
+            'working_time_id': working_time_id,
+            'task_id': task_id,
+            'task_name': task_name,
+            'duration_minutes': duration_minutes,
+            'user_id': user.get('id') if user else None,
+            'request_data': data,
+            'error_type': type(e).__name__
+        })
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/working-times/<working_time_id>/ui-project-times/<task_id>',

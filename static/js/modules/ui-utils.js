@@ -61,37 +61,19 @@ export function logApiError(operation, error, context = {}) {
         ...context
     };
 
-    // Log detailed error information
-    console.group(`🚨 API Error: ${operation}`);
-    console.error("Error message:", error.message);
-    console.error("Error stack:", error.stack);
+    // Log comprehensive error information in a single message
+    const logMessage = [
+        `API Error: ${operation}`,
+        `Message: ${error.message}`,
+        context.requestMethod && context.requestUrl ? `Request: ${context.requestMethod} ${context.requestUrl}` : '',
+        context.requestData ? `Request data: ${JSON.stringify(context.requestData)}` : '',
+        context.responseStatus ? `Response status: ${context.responseStatus}` : '',
+        context.responseData ? `Response: ${JSON.stringify(context.responseData)}` : '',
+        `Browser: ${errorDetails.userAgent.split(' ')[0]}`, // Just browser name
+        `Timestamp: ${errorDetails.timestamp}`
+    ].filter(Boolean).join(' | ');
     
-    if (context.requestData) {
-        console.error("Request data:", context.requestData);
-    }
-    
-    if (context.requestUrl) {
-        console.error("Request URL:", context.requestUrl);
-    }
-    
-    if (context.requestMethod) {
-        console.error("Request method:", context.requestMethod);
-    }
-    
-    if (context.responseStatus) {
-        console.error("Response status:", context.responseStatus);
-    }
-    
-    if (context.responseData) {
-        console.error("Response data:", context.responseData);
-    }
-    
-    if (context.responseHeaders) {
-        console.error("Response headers:", context.responseHeaders);
-    }
-    
-    console.error("Full error context:", errorDetails);
-    console.groupEnd();
+    console.error(logMessage, errorDetails);
 
     return errorDetails;
 }

@@ -199,8 +199,9 @@ export async function handleFormSubmission(submitFunction, options = {}) {
             });
         }
         
-        // Don't re-throw to prevent modal closure
-        return null;
+        // Re-throw the error to ensure the calling code knows an error occurred
+        // This prevents success callbacks from running
+        throw error;
     }
 }
 
