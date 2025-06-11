@@ -332,7 +332,8 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         # Create a project time for testing if we don't have one
         if not self.test_project_times:
             self.test_08_create_project_time()
-            pt = self.test_project_time
+            pt_id = self.test_project_times[0]
+        pt = self.api.get_project_time(pt_id)
         else:
             pt_id = self.test_project_times[0]
             pt = self.api.get_project_time(pt_id)
@@ -363,7 +364,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         # Create a project time for testing if we don't have one
         if not self.test_project_times:
             self.test_08_create_project_time()
-            pt_id = self.test_project_time["id"]
+            pt_id = self.test_project_times[0]
         else:
             pt_id = self.test_project_times[0]
 
@@ -403,7 +404,8 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         # Get a working time for testing
         if not self.test_working_times:
             self.test_03_create_working_time()
-            wt = self.test_working_time
+            wt_id = self.test_working_times[0]
+        wt = self.api.get_working_time(wt_id)
         else:
             wt_id = self.test_working_times[0]
             wt = self.api.get_working_time(wt_id)
@@ -471,7 +473,8 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         # Get a working time for testing
         if not self.test_working_times:
             self.test_03_create_working_time()
-            wt = self.test_working_time
+            wt_id = self.test_working_times[0]
+        wt = self.api.get_working_time(wt_id)
         else:
             wt_id = self.test_working_times[0]
             wt = self.api.get_working_time(wt_id)
