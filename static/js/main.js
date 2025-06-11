@@ -17,7 +17,8 @@ import {
 } from './modules/time-utils.js';
 import { escapeHtml, extractTimeRangeFromWorkingTime } from './modules/dom-utils.js';
 import { saveExpandedState, getExpandedStates, findMostRecentlyExpandedWorkingTime } from './modules/state-management.js';
-import { logMessage, showAlert, debounce, logApiError } from './modules/ui-utils.js';
+import { logMessage, showAlert, debounce } from './modules/ui-utils.js';
+import { fetchWithErrorHandling, handleApiResponse } from './modules/error-handler.js';
 import { sortWorkingTimesLatestFirst, sortTasksAlphabetically } from './modules/sorting-utils.js';
 import { openTimeAllocationModal, openDistributeTimeModal, fetchUIProjectTimes, renderUIProjectTimes, renderTimeAllocationProgress } from './project-time-handler.js';
 
@@ -1262,11 +1263,13 @@ document.addEventListener("DOMContentLoaded", function () {
             workingTimeItem.style.opacity = "0.5";
         }
 
-        // Send delete request
-        fetch(`/api/working-times/${workingTimeId}`, {
+        // Send delete request using enhanced error handling
+        fetchWithErrorHandling(`/api/working-times/${workingTimeId}`, {
             method: "DELETE",
+        }, {
+            operation: "delete working time",
+            workingTimeId: workingTimeId
         })
-            .then(handleApiResponse)
             .then((data) => {
                 // Show success message
                 showAlert("Working time deleted successfully", "success");
