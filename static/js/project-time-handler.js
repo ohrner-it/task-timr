@@ -470,7 +470,11 @@ async function saveTimeAllocation(event) {
             requestMethod = "POST";
         }
 
-        // Direct fetch with manual error handling for better Firefox compatibility
+        // Log request details for debugging Firefox issues
+        console.log(`Making ${requestMethod} request to: ${requestUrl}`);
+        console.log('Request data:', JSON.stringify(requestData));
+        console.log('Working time ID:', workingTimeId);
+        
         const response = await fetch(requestUrl, {
             method: requestMethod,
             headers: {
