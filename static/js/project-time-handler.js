@@ -464,171 +464,184 @@ async function saveTimeAllocation() {
             requestMethod = "POST";
         }
 
-        // Use the enhanced fetch wrapper with automatic error handling
-        const data = await fetchWithErrorHandling(requestUrl, {
+        // Direct fetch with manual error handling for better Firefox compatibility
+        const response = await fetch(requestUrl, {
             method: requestMethod,
             headers: {
                 "Content-Type": "application/json",
+                "Accept": "application/json",
             },
             body: JSON.stringify(requestData),
-        }, {
-            operation: "save time allocation",
-            workingTimeId: workingTimeId,
-            taskId: taskId,
-            selectedTaskId: selectedTaskId,
-            duration: duration
         });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            let errorData;
+            try {
+                errorData = JSON.parse(errorText);
+            } catch (e) {
+                errorData = { error: `Server error (${response.status})` };
+            }
+            throw new Error(errorData.error || `HTTP ${response.status}: Failed to save time allocation`);
+        }
+
+        const data = await response.json();
 
         return data;
     };
 
     try {
-        const data = await handleFormSubmission(submitOperation, {
-            operation: "save time allocation",
-            form: form
-        });
+        const data = await submitOperation();
 
-        // Only execute success logic if no error occurred
-        if (data) {
-            // Check if this is a "Save and Add New" operation
-            const saveAndAddNew = form.dataset.saveAndAddNew === "true";
-            
-            // Close modal only if not "Save and Add New"
-            const modal = bootstrap.Modal.getInstance(
-                document.getElementById("time-allocation-modal"),
-            );
-            if (modal && !saveAndAddNew) {
-                modal.hide();
-            }
+        // Success - execute success logic
+        // Check if this is a "Save and Add New" operation
+        const saveAndAddNew = form.dataset.saveAndAddNew === "true";
+        
+        // Close modal only if not "Save and Add New"
+        const modal = bootstrap.Modal.getInstance(
+            document.getElementById("time-allocation-modal"),
+        );
+        if (modal && !saveAndAddNew) {
+            modal.hide();
+        }
 
-            // Show success message with details if adding to existing allocation
-            let successMessage = "Time allocation saved successfully";
+        // Show success message with details if adding to existing allocation
+        let successMessage = "Time allocation saved successfully";
 
-            // Check if we were adding to an existing allocation (only for new allocations, not edits)
-            if (!taskId) {
-                try {
-                    const currentAllocations = JSON.parse(
-                        form.dataset.currentAllocations || "[]",
-                    );
-                    const existingAllocation = currentAllocations.find(
-                        (allocation) => allocation.task_id === selectedTaskId,
-                    );
-
-                    if (existingAllocation) {
-                        const existingDuration =
-                            existingAllocation.duration_minutes;
-                        const totalDuration = existingDuration + duration;
-                        successMessage = `Added ${formatDuration(duration)} to '${taskName}'. Total time allocated: ${formatDuration(totalDuration)}.`;
-                    }
-                } catch (e) {
-                    // Fall back to generic message if we can't parse allocations
-                    console.warn("Could not parse allocations for success message");
-                }
-            }
-
-            showAlert(successMessage, "success");
-
-            // Update the UI without losing context
-            handleUIProjectTimeResponse(data, workingTimeId);
-
-            // Make sure the working time details section remains open
-            const workingTimeItem = document.querySelector(
-                `.working-time-item[data-id="${workingTimeId}"]`,
-            );
-            if (workingTimeItem) {
-                const detailsSection = workingTimeItem.querySelector(
-                    ".working-time-details",
+        // Check if we were adding to an existing allocation (only for new allocations, not edits)
+        if (!taskId) {
+            try {
+                const currentAllocations = JSON.parse(
+                    form.dataset.currentAllocations || "[]",
                 );
-                if (detailsSection) {
-                    detailsSection.classList.remove("d-none");
+                const existingAllocation = currentAllocations.find(
+                    (allocation) => allocation.task_id === selectedTaskId,
+                );
+
+                if (existingAllocation) {
+                    const existingDuration =
+                        existingAllocation.duration_minutes;
+                    const totalDuration = existingDuration + duration;
+                    successMessage = `Added ${formatDuration(duration)} to '${taskName}'. Total time allocated: ${formatDuration(totalDuration)}.`;
+                }
+            } catch (e) {
+                // Fall back to generic message if we can't parse allocations
+                console.warn("Could not parse allocations for success message");
+            }
+        }
+
+        showAlert(successMessage, "success");
+
+        // Update the UI without losing context
+        handleUIProjectTimeResponse(data, workingTimeId);
+
+        // Make sure the working time details section remains open
+        const workingTimeItem = document.querySelector(
+            `.working-time-item[data-id="${workingTimeId}"]`,
+        );
+        if (workingTimeItem) {
+            const detailsSection = workingTimeItem.querySelector(
+                ".working-time-details",
+            );
+            if (detailsSection) {
+                detailsSection.classList.remove("d-none");
+            }
+        }
+
+        // If this is "Save and Add New", reset the form for another entry
+        if (saveAndAddNew) {
+            // Clear the saveAndAddNew flag
+            delete form.dataset.saveAndAddNew;
+            
+            // Reset form for a new entry, but keep the working time ID
+            form.reset();
+            delete form.dataset.taskId;
+            
+            // Reset task selection UI
+            const taskIdInput = document.getElementById("selected-task-id");
+            const taskNameDisplay = document.getElementById("selected-task-name");
+            const selectedTaskContainer = document.getElementById("selected-task-container");
+            
+            if (taskIdInput) taskIdInput.value = "";
+            if (taskNameDisplay) taskNameDisplay.textContent = "";
+            if (selectedTaskContainer) selectedTaskContainer.classList.add("d-none");
+            
+            // Set default duration (considering updated remaining time)
+            const durationInput = document.getElementById("time-allocation-duration");
+            if (durationInput) {
+                // Use the updated remaining time from the response if available
+                const remainingMinutes = data.remaining_duration || 60;
+                const defaultDuration = Math.min(60, remainingMinutes);
+                durationInput.value = defaultDuration > 0 ? defaultDuration : 60;
+            }
+            
+            // Update stored allocations with the new data
+            workingTimeAllocations.set(workingTimeId, {
+                allocations: data.ui_project_times || [],
+                remainingDuration: data.remaining_duration || 0,
+                isFullyAllocated: data.is_fully_allocated || false,
+                workingDuration: data.working_duration || 0
+            });
+            
+            // Update the form's current allocations dataset for the preview system
+            form.dataset.currentAllocations = JSON.stringify(data.ui_project_times || []);
+            
+            // Update the form's remaining duration for the duration button highlighting
+            form.dataset.remainingDuration = data.remaining_duration || 0;
+            
+            // Clear any existing alerts and show a helpful message
+            const modalAlerts = document.querySelector("#time-allocation-modal .modal-alerts");
+            if (modalAlerts) {
+                const remainingMinutes = data.remaining_duration || 0;
+                if (remainingMinutes > 0) {
+                    modalAlerts.innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle me-2"></i>
+                            Time allocation saved! You have <strong>${formatDuration(remainingMinutes)}</strong> remaining to allocate.
+                        </div>
+                    `;
+                } else {
+                    modalAlerts.innerHTML = `
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            Time allocation saved! This working time is now fully allocated.
+                        </div>
+                    `;
                 }
             }
-
-            // If this is "Save and Add New", reset the form for another entry
-            if (saveAndAddNew) {
-                // Clear the saveAndAddNew flag
-                delete form.dataset.saveAndAddNew;
-                
-                // Reset form for a new entry, but keep the working time ID
-                form.reset();
-                delete form.dataset.taskId;
-                
-                // Reset task selection UI
-                const taskIdInput = document.getElementById("selected-task-id");
-                const taskNameDisplay = document.getElementById("selected-task-name");
-                const selectedTaskContainer = document.getElementById("selected-task-container");
-                
-                if (taskIdInput) taskIdInput.value = "";
-                if (taskNameDisplay) taskNameDisplay.textContent = "";
-                if (selectedTaskContainer) selectedTaskContainer.classList.add("d-none");
-                
-                // Set default duration (considering updated remaining time)
-                const durationInput = document.getElementById("time-allocation-duration");
-                if (durationInput) {
-                    // Use the updated remaining time from the response if available
-                    const remainingMinutes = data.remaining_duration || 60;
-                    const defaultDuration = Math.min(60, remainingMinutes);
-                    durationInput.value = defaultDuration > 0 ? defaultDuration : 60;
-                }
-                
-                // Update stored allocations with the new data
-                workingTimeAllocations.set(workingTimeId, {
-                    allocations: data.ui_project_times || [],
-                    remainingDuration: data.remaining_duration || 0,
-                    isFullyAllocated: data.is_fully_allocated || false,
-                    workingDuration: data.working_duration || 0
-                });
-                
-                // Update the form's current allocations dataset for the preview system
-                form.dataset.currentAllocations = JSON.stringify(data.ui_project_times || []);
-                
-                // Update the form's remaining duration for the duration button highlighting
-                form.dataset.remainingDuration = data.remaining_duration || 0;
-                
-                // Clear any existing alerts and show a helpful message
-                const modalAlerts = document.querySelector("#time-allocation-modal .modal-alerts");
-                if (modalAlerts) {
-                    const remainingMinutes = data.remaining_duration || 0;
-                    if (remainingMinutes > 0) {
-                        modalAlerts.innerHTML = `
-                            <div class="alert alert-success">
-                                <i class="bi bi-check-circle me-2"></i>
-                                Time allocation saved! You have <strong>${formatDuration(remainingMinutes)}</strong> remaining to allocate.
-                            </div>
-                        `;
-                    } else {
-                        modalAlerts.innerHTML = `
-                            <div class="alert alert-warning">
-                                <i class="bi bi-exclamation-triangle me-2"></i>
-                                Time allocation saved! This working time is now fully allocated.
-                            </div>
-                        `;
-                    }
-                }
-                
-                // Update button states and preview
-                updateSaveButtonState();
-                updateTimeAllocationPreview();
-                
-                // Trigger custom event to update duration button highlighting
-                setTimeout(() => {
-                    document.dispatchEvent(new CustomEvent('updateDurationButtons'));
-                }, 50);
-                
-                // Focus on task search for quick entry
-                const taskSearchInput = document.getElementById("task-search");
-                if (taskSearchInput) {
-                    setTimeout(() => taskSearchInput.focus(), 100);
-                }
+            
+            // Update button states and preview
+            updateSaveButtonState();
+            updateTimeAllocationPreview();
+            
+            // Trigger custom event to update duration button highlighting
+            setTimeout(() => {
+                document.dispatchEvent(new CustomEvent('updateDurationButtons'));
+            }, 50);
+            
+            // Focus on task search for quick entry
+            const taskSearchInput = document.getElementById("task-search");
+            if (taskSearchInput) {
+                setTimeout(() => taskSearchInput.focus(), 100);
             }
         }
 
         return data;
     } catch (error) {
-        // Error handling is done by handleFormSubmission, but we need to prevent
-        // any success logic from running when an error occurs
-        // The modal will stay open because handleFormSubmission shows errors in modal context
-        console.error("Form submission failed:", error.message);
+        // Show error in modal and keep it open
+        const modalAlerts = document.querySelector("#time-allocation-modal .modal-alerts");
+        if (modalAlerts) {
+            modalAlerts.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    ${error.message}
+                </div>
+            `;
+        }
+        
+        // Log detailed error information
+        console.error(`API Error: save time allocation | Message: ${error.message} | Request: POST /api/working-times/${workingTimeId}/ui-project-times | Request data: ${JSON.stringify({task_id: selectedTaskId, task_name: taskName, duration_minutes: duration})} | Browser: ${navigator.userAgent.split(' ')[0]} | Timestamp: ${new Date().toISOString()}`);
+        
         return null;
     } finally {
         // Reset UI elements regardless of success or failure
