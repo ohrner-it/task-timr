@@ -9,7 +9,7 @@
 import { parseJiraDuration, isReasonableDuration, JIRA_PARSE_DELAY_MS } from './modules/duration-parser.js';
 import { formatDuration } from './modules/time-utils.js';
 import { escapeHtml } from './modules/dom-utils.js';
-import { logMessage, showAlert } from './modules/ui-utils.js';
+import { logMessage, showAlert, logApiError } from './modules/ui-utils.js';
 import { sortUIProjectTimesAlphabetically } from './modules/sorting-utils.js';
 
 // Global state to store current allocations per working time
@@ -440,49 +440,89 @@ async function saveTimeAllocation() {
 
     try {
         let response;
+        let requestData;
+        let requestUrl;
+        let requestMethod;
 
         if (taskId) {
             // For editing an existing UI time allocation, use PATCH
-            const data = {
+            requestData = {
                 duration_minutes: duration,
                 task_name: taskName,
             };
+            requestUrl = `/api/working-times/${workingTimeId}/ui-project-times/${taskId}`;
+            requestMethod = "PATCH";
 
-            response = await fetch(
-                `/api/working-times/${workingTimeId}/ui-project-times/${taskId}`,
-                {
-                    method: "PATCH",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(data),
+            response = await fetch(requestUrl, {
+                method: requestMethod,
+                headers: {
+                    "Content-Type": "application/json",
                 },
-            );
+                body: JSON.stringify(requestData),
+            });
         } else {
             // For new UI time allocations, use POST
-            const data = {
+            requestData = {
                 task_id: selectedTaskId,
                 task_name: taskName,
                 task_breadcrumbs: taskBreadcrumbs,
                 duration_minutes: duration,
             };
+            requestUrl = `/api/working-times/${workingTimeId}/ui-project-times`;
+            requestMethod = "POST";
 
-            response = await fetch(
-                `/api/working-times/${workingTimeId}/ui-project-times`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(data),
+            response = await fetch(requestUrl, {
+                method: requestMethod,
+                headers: {
+                    "Content-Type": "application/json",
                 },
-            );
+                body: JSON.stringify(requestData),
+            });
         }
 
-        // Check response
+        // Check response and handle errors with detailed logging
         if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.error || "Failed to save time allocation");
+            let responseData;
+            let responseText;
+            
+            try {
+                responseText = await response.text();
+                responseData = JSON.parse(responseText);
+            } catch (parseError) {
+                responseData = { error: `Server returned ${response.status}: ${responseText || 'Unknown error'}` };
+            }
+
+            // Collect response headers for debugging
+            const responseHeaders = {};
+            response.headers.forEach((value, key) => {
+                responseHeaders[key] = value;
+            });
+
+            // Log detailed error information
+            const errorContext = {
+                requestData: requestData,
+                requestUrl: requestUrl,
+                requestMethod: requestMethod,
+                responseStatus: response.status,
+                responseData: responseData,
+                responseHeaders: responseHeaders,
+                workingTimeId: workingTimeId,
+                taskId: taskId,
+                selectedTaskId: selectedTaskId,
+                duration: duration,
+                browserInfo: {
+                    userAgent: navigator.userAgent,
+                    language: navigator.language,
+                    cookieEnabled: navigator.cookieEnabled
+                }
+            };
+
+            const errorMessage = responseData.error || `HTTP ${response.status}: Failed to save time allocation`;
+            const apiError = new Error(errorMessage);
+            
+            logApiError("save time allocation", apiError, errorContext);
+            
+            throw apiError;
         }
 
         // Parse response data
@@ -622,8 +662,16 @@ async function saveTimeAllocation() {
 
         return data;
     } catch (error) {
-        console.error("Error:", error);
+        // Enhanced error logging is already done in the try block via logApiError
+        // Show user-friendly error in the modal (keep modal open)
         showAlert(`Error: ${error.message}`, "danger", true);
+        
+        // Log a summary to console as well for quick reference
+        console.error("Time allocation save failed:", error.message);
+        
+        // DO NOT close the modal when there's an error - user needs to read the message
+        // The modal will stay open and user can try again or cancel manually
+        
     } finally {
         // Reset both buttons
         let submitBtn = document.querySelector(
@@ -675,18 +723,54 @@ async function deleteTimeAllocation(taskId, workingTimeId) {
     }
 
     try {
+        const requestUrl = `/api/working-times/${workingTimeId}/ui-project-times/${taskId}`;
+        const requestMethod = "DELETE";
+        
         // Send delete request
-        const response = await fetch(
-            `/api/working-times/${workingTimeId}/ui-project-times/${taskId}`,
-            {
-                method: "DELETE",
-            },
-        );
+        const response = await fetch(requestUrl, {
+            method: requestMethod,
+        });
 
-        // Check response
+        // Check response with enhanced error handling
         if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.error || "Failed to delete time allocation");
+            let responseData;
+            let responseText;
+            
+            try {
+                responseText = await response.text();
+                responseData = JSON.parse(responseText);
+            } catch (parseError) {
+                responseData = { error: `Server returned ${response.status}: ${responseText || 'Unknown error'}` };
+            }
+
+            // Collect response headers for debugging
+            const responseHeaders = {};
+            response.headers.forEach((value, key) => {
+                responseHeaders[key] = value;
+            });
+
+            // Log detailed error information
+            const errorContext = {
+                requestUrl: requestUrl,
+                requestMethod: requestMethod,
+                responseStatus: response.status,
+                responseData: responseData,
+                responseHeaders: responseHeaders,
+                workingTimeId: workingTimeId,
+                taskId: taskId,
+                browserInfo: {
+                    userAgent: navigator.userAgent,
+                    language: navigator.language,
+                    cookieEnabled: navigator.cookieEnabled
+                }
+            };
+
+            const errorMessage = responseData.error || `HTTP ${response.status}: Failed to delete time allocation`;
+            const apiError = new Error(errorMessage);
+            
+            logApiError("delete time allocation", apiError, errorContext);
+            
+            throw apiError;
         }
 
         // Parse response data

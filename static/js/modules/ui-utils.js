@@ -46,6 +46,57 @@ export function logMessage(message, level = "info", data = null) {
 }
 
 /**
+ * Enhanced error logging function for API errors
+ * @param {string} operation - Operation that failed (e.g., "save time allocation")
+ * @param {Error} error - The error object
+ * @param {object} context - Additional context (request data, response, etc.)
+ */
+export function logApiError(operation, error, context = {}) {
+    const errorDetails = {
+        operation: operation,
+        message: error.message,
+        timestamp: new Date().toISOString(),
+        userAgent: navigator?.userAgent || 'unknown',
+        url: window?.location?.href || 'unknown',
+        ...context
+    };
+
+    // Log detailed error information
+    console.group(`🚨 API Error: ${operation}`);
+    console.error("Error message:", error.message);
+    console.error("Error stack:", error.stack);
+    
+    if (context.requestData) {
+        console.error("Request data:", context.requestData);
+    }
+    
+    if (context.requestUrl) {
+        console.error("Request URL:", context.requestUrl);
+    }
+    
+    if (context.requestMethod) {
+        console.error("Request method:", context.requestMethod);
+    }
+    
+    if (context.responseStatus) {
+        console.error("Response status:", context.responseStatus);
+    }
+    
+    if (context.responseData) {
+        console.error("Response data:", context.responseData);
+    }
+    
+    if (context.responseHeaders) {
+        console.error("Response headers:", context.responseHeaders);
+    }
+    
+    console.error("Full error context:", errorDetails);
+    console.groupEnd();
+
+    return errorDetails;
+}
+
+/**
  * Show an alert message to the user
  * @param {string} message - Alert message to display
  * @param {string} type - Bootstrap alert type (info, success, warning, danger)
