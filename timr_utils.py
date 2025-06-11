@@ -397,6 +397,24 @@ class ProjectTimeConsolidator:
             end = pt.get('end', 'unknown')
             logger.info(f"  Current: Task {task_id} from {start} to {end}")
 
+        # Merge multiple project times for the same task to avoid accidental
+        # duplication when updating. We keep the first occurrence as the primary
+        # project time and mark the rest for deletion.
+        unique_project_times = []
+        duplicate_project_times = []
+        seen_tasks: Set[str] = set()
+        for pt in current_project_times:
+            task_id = pt.get('task', {}).get('id')
+            if not task_id:
+                continue
+            if task_id in seen_tasks:
+                duplicate_project_times.append(pt)
+            else:
+                seen_tasks.add(task_id)
+                unique_project_times.append(pt)
+
+        current_project_times = unique_project_times
+
         # Calculate desired time slots using existing logic
         desired_time_slots = self._calculate_time_slots(working_time, desired_tasks)
             
@@ -406,7 +424,15 @@ class ProjectTimeConsolidator:
                 f"  Desired: Task {slot['task_id']} from {slot['start']} to {slot['end']} ({slot['duration_minutes']}min)"
             )
 
-        # Create lookup maps
+        # Remove duplicate project times that were previously collected
+        deleted = 0
+        for dup in duplicate_project_times:
+            logger.info(
+                f"Deleting duplicate project time for task {dup.get('task', {}).get('id')} (ID: {dup.get('id')})")
+            self.timr_api.delete_project_time(dup['id'])
+            deleted += 1
+
+        # Create lookup maps using the de-duplicated list
         current_by_task = {}
         for pt in current_project_times:
             task_id = pt.get('task', {}).get('id')
@@ -420,10 +446,10 @@ class ProjectTimeConsolidator:
         logger.info(f"Current tasks: {list(current_by_task.keys())}")
         logger.info(f"Desired tasks: {list(desired_by_task.keys())}")
 
-        # Track changes for logging
+        # Track changes for logging. `deleted` already contains the number of
+        # duplicate project times removed above.
         created = 0
         updated = 0
-        deleted = 0
 
         # 1. Delete tasks that exist currently but not in desired state
         tasks_to_delete = set(current_by_task.keys()) - set(
@@ -483,12 +509,15 @@ class ProjectTimeConsolidator:
             self, working_time: Dict[str, Any],
             tasks: List[UIProjectTime]) -> List[Dict[str, Any]]:
         """
-        Calculate non-overlapping time slots for all tasks within a working time.
-        
-        Enhanced to handle working time boundary changes:
-        - If working time start changes, all project times are shifted to new start
-        - If working time duration is reduced, tasks may overlap at the end
-        - Task durations are preserved as specified in requirements
+        Calculate sequential time slots for all tasks within a working time.
+
+        The consolidator sorts tasks by name (descending) and then assigns each
+        task a slot starting at the end of the previous one. Durations are
+        preserved exactly. If the working time is shorter than the summed
+        durations the last slots may extend beyond the working time end which
+        intentionally results in overlapping project times. These overlaps are
+        surfaced to the user so they can decide whether to extend the working
+        time or shorten some task durations.
 
         Args:
             working_time (dict): The working time entry

@@ -492,6 +492,16 @@ The application follows RESTful principles with working time-scoped UIProjectTim
 
 The consolidator is the core abstraction layer that allows the frontend to work with simple task durations while maintaining compatibility with Timr's time slot requirements.
 
+### Time Slot Handling Overview
+
+Timr stores project times as individual time slots. Users, however, usually think in
+terms of total time spent on a task during a working time. The `ProjectTimeConsolidator`
+merges all slots of the same task into a single `UIProjectTime` object and generates
+new sequential time slots when saving changes. Duplicate time slots returned from the
+API are removed so that exactly one project time per task remains after an update.
+Slots are created in descending order of the task names and may overlap if the working
+time is shorter than the combined duration.
+
 ## Key Design Patterns
 
 ### Composite Key Pattern
