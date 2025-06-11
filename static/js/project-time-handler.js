@@ -9,7 +9,8 @@
 import { parseJiraDuration, isReasonableDuration, JIRA_PARSE_DELAY_MS } from './modules/duration-parser.js';
 import { formatDuration } from './modules/time-utils.js';
 import { escapeHtml } from './modules/dom-utils.js';
-import { logMessage, showAlert, logApiError } from './modules/ui-utils.js';
+import { logMessage, showAlert } from './modules/ui-utils.js';
+import { fetchWithErrorHandling, handleFormSubmission, resetUIElements, handleUIError } from './modules/error-handler.js';
 import { sortUIProjectTimesAlphabetically } from './modules/sorting-utils.js';
 
 // Global state to store current allocations per working time
@@ -438,8 +439,7 @@ async function saveTimeAllocation() {
             '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
     }
 
-    try {
-        let response;
+    const submitOperation = async () => {
         let requestData;
         let requestUrl;
         let requestMethod;
@@ -452,14 +452,6 @@ async function saveTimeAllocation() {
             };
             requestUrl = `/api/working-times/${workingTimeId}/ui-project-times/${taskId}`;
             requestMethod = "PATCH";
-
-            response = await fetch(requestUrl, {
-                method: requestMethod,
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(requestData),
-            });
         } else {
             // For new UI time allocations, use POST
             requestData = {
@@ -470,231 +462,184 @@ async function saveTimeAllocation() {
             };
             requestUrl = `/api/working-times/${workingTimeId}/ui-project-times`;
             requestMethod = "POST";
-
-            response = await fetch(requestUrl, {
-                method: requestMethod,
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(requestData),
-            });
         }
 
-        // Check response and handle errors with detailed logging
-        if (!response.ok) {
-            let responseData;
-            let responseText;
-            
-            try {
-                responseText = await response.text();
-                responseData = JSON.parse(responseText);
-            } catch (parseError) {
-                responseData = { error: `Server returned ${response.status}: ${responseText || 'Unknown error'}` };
-            }
-
-            // Collect response headers for debugging
-            const responseHeaders = {};
-            response.headers.forEach((value, key) => {
-                responseHeaders[key] = value;
-            });
-
-            // Log detailed error information
-            const errorContext = {
-                requestData: requestData,
-                requestUrl: requestUrl,
-                requestMethod: requestMethod,
-                responseStatus: response.status,
-                responseData: responseData,
-                responseHeaders: responseHeaders,
-                workingTimeId: workingTimeId,
-                taskId: taskId,
-                selectedTaskId: selectedTaskId,
-                duration: duration,
-                browserInfo: {
-                    userAgent: navigator.userAgent,
-                    language: navigator.language,
-                    cookieEnabled: navigator.cookieEnabled
-                }
-            };
-
-            const errorMessage = responseData.error || `HTTP ${response.status}: Failed to save time allocation`;
-            const apiError = new Error(errorMessage);
-            
-            logApiError("save time allocation", apiError, errorContext);
-            
-            throw apiError;
-        }
-
-        // Parse response data
-        const data = await response.json();
-
-        // Check if this is a "Save and Add New" operation
-        const saveAndAddNew = form.dataset.saveAndAddNew === "true";
-        
-        // Close modal only if not "Save and Add New"
-        const modal = bootstrap.Modal.getInstance(
-            document.getElementById("time-allocation-modal"),
-        );
-        if (modal && !saveAndAddNew) {
-            modal.hide();
-        }
-
-        // Show success message with details if adding to existing allocation
-        let successMessage = "Time allocation saved successfully";
-
-        // Check if we were adding to an existing allocation (only for new allocations, not edits)
-        if (!taskId) {
-            try {
-                const currentAllocations = JSON.parse(
-                    form.dataset.currentAllocations || "[]",
-                );
-                const existingAllocation = currentAllocations.find(
-                    (allocation) => allocation.task_id === selectedTaskId,
-                );
-
-                if (existingAllocation) {
-                    const existingDuration =
-                        existingAllocation.duration_minutes;
-                    const totalDuration = existingDuration + duration;
-                    successMessage = `Added ${formatDuration(duration)} to '${taskName}'. Total time allocated: ${formatDuration(totalDuration)}.`;
-                }
-            } catch (e) {
-                // Fall back to generic message if we can't parse allocations
-                console.warn("Could not parse allocations for success message");
-            }
-        }
-
-        showAlert(successMessage, "success");
-
-        // Update the UI without losing context
-        handleUIProjectTimeResponse(data, workingTimeId);
-
-        // Make sure the working time details section remains open
-        const workingTimeItem = document.querySelector(
-            `.working-time-item[data-id="${workingTimeId}"]`,
-        );
-        if (workingTimeItem) {
-            const detailsSection = workingTimeItem.querySelector(
-                ".working-time-details",
-            );
-            if (detailsSection) {
-                detailsSection.classList.remove("d-none");
-            }
-        }
-
-        // If this is "Save and Add New", reset the form for another entry
-        if (saveAndAddNew) {
-            // Clear the saveAndAddNew flag
-            delete form.dataset.saveAndAddNew;
-            
-            // Reset form for a new entry, but keep the working time ID
-            form.reset();
-            delete form.dataset.taskId;
-            
-            // Reset task selection UI
-            const taskIdInput = document.getElementById("selected-task-id");
-            const taskNameDisplay = document.getElementById("selected-task-name");
-            const selectedTaskContainer = document.getElementById("selected-task-container");
-            
-            if (taskIdInput) taskIdInput.value = "";
-            if (taskNameDisplay) taskNameDisplay.textContent = "";
-            if (selectedTaskContainer) selectedTaskContainer.classList.add("d-none");
-            
-            // Set default duration (considering updated remaining time)
-            const durationInput = document.getElementById("time-allocation-duration");
-            if (durationInput) {
-                // Use the updated remaining time from the response if available
-                const remainingMinutes = data.remaining_duration || 60;
-                const defaultDuration = Math.min(60, remainingMinutes);
-                durationInput.value = defaultDuration > 0 ? defaultDuration : 60;
-            }
-            
-            // Update stored allocations with the new data
-            workingTimeAllocations.set(workingTimeId, {
-                allocations: data.ui_project_times || [],
-                remainingDuration: data.remaining_duration || 0,
-                isFullyAllocated: data.is_fully_allocated || false,
-                workingDuration: data.working_duration || 0
-            });
-            
-            // Update the form's current allocations dataset for the preview system
-            form.dataset.currentAllocations = JSON.stringify(data.ui_project_times || []);
-            
-            // Update the form's remaining duration for the duration button highlighting
-            form.dataset.remainingDuration = data.remaining_duration || 0;
-            
-            // Clear any existing alerts and show a helpful message
-            const modalAlerts = document.querySelector("#time-allocation-modal .modal-alerts");
-            if (modalAlerts) {
-                const remainingMinutes = data.remaining_duration || 0;
-                if (remainingMinutes > 0) {
-                    modalAlerts.innerHTML = `
-                        <div class="alert alert-success">
-                            <i class="bi bi-check-circle me-2"></i>
-                            Time allocation saved! You have <strong>${formatDuration(remainingMinutes)}</strong> remaining to allocate.
-                        </div>
-                    `;
-                } else {
-                    modalAlerts.innerHTML = `
-                        <div class="alert alert-warning">
-                            <i class="bi bi-exclamation-triangle me-2"></i>
-                            Time allocation saved! This working time is now fully allocated.
-                        </div>
-                    `;
-                }
-            }
-            
-            // Update button states and preview
-            updateSaveButtonState();
-            updateTimeAllocationPreview();
-            
-            // Trigger custom event to update duration button highlighting
-            setTimeout(() => {
-                document.dispatchEvent(new CustomEvent('updateDurationButtons'));
-            }, 50);
-            
-            // Focus on task search for quick entry
-            const taskSearchInput = document.getElementById("task-search");
-            if (taskSearchInput) {
-                setTimeout(() => taskSearchInput.focus(), 100);
-            }
-        }
+        // Use the enhanced fetch wrapper with automatic error handling
+        const data = await fetchWithErrorHandling(requestUrl, {
+            method: requestMethod,
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(requestData),
+        }, {
+            operation: "save time allocation",
+            workingTimeId: workingTimeId,
+            taskId: taskId,
+            selectedTaskId: selectedTaskId,
+            duration: duration
+        });
 
         return data;
-    } catch (error) {
-        // Enhanced error logging is already done in the try block via logApiError
-        // Show user-friendly error in the modal (keep modal open)
-        showAlert(`Error: ${error.message}`, "danger", true);
-        
-        // Log a summary to console as well for quick reference
-        console.error("Time allocation save failed:", error.message);
-        
-        // DO NOT close the modal when there's an error - user needs to read the message
-        // The modal will stay open and user can try again or cancel manually
-        
-    } finally {
-        // Reset both buttons
-        let submitBtn = document.querySelector(
-            `button[type="submit"][form="${form.id}"]`,
-        );
-        if (!submitBtn) {
-            submitBtn = form.querySelector('button[type="submit"]');
-        }
-        
-        const saveAndAddNewBtn = document.getElementById("save-and-add-new-btn");
+    };
 
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = "Save";
-            submitBtn.classList.remove("btn-processing");
-        }
-        
-        if (saveAndAddNewBtn) {
-            saveAndAddNewBtn.disabled = false;
-            saveAndAddNewBtn.innerHTML = "Save and Add New";
-            saveAndAddNewBtn.classList.remove("btn-processing");
-        }
-        
+    try {
+        const data = await handleFormSubmission(submitOperation, {
+            operation: "save time allocation",
+            form: form,
+            onSuccess: (data) => {
+                // Check if this is a "Save and Add New" operation
+                const saveAndAddNew = form.dataset.saveAndAddNew === "true";
+                
+                // Close modal only if not "Save and Add New"
+                const modal = bootstrap.Modal.getInstance(
+                    document.getElementById("time-allocation-modal"),
+                );
+                if (modal && !saveAndAddNew) {
+                    modal.hide();
+                }
+
+                // Show success message with details if adding to existing allocation
+                let successMessage = "Time allocation saved successfully";
+
+                // Check if we were adding to an existing allocation (only for new allocations, not edits)
+                if (!taskId) {
+                    try {
+                        const currentAllocations = JSON.parse(
+                            form.dataset.currentAllocations || "[]",
+                        );
+                        const existingAllocation = currentAllocations.find(
+                            (allocation) => allocation.task_id === selectedTaskId,
+                        );
+
+                        if (existingAllocation) {
+                            const existingDuration =
+                                existingAllocation.duration_minutes;
+                            const totalDuration = existingDuration + duration;
+                            successMessage = `Added ${formatDuration(duration)} to '${taskName}'. Total time allocated: ${formatDuration(totalDuration)}.`;
+                        }
+                    } catch (e) {
+                        // Fall back to generic message if we can't parse allocations
+                        console.warn("Could not parse allocations for success message");
+                    }
+                }
+
+                showAlert(successMessage, "success");
+
+                // Update the UI without losing context
+                handleUIProjectTimeResponse(data, workingTimeId);
+
+                // Make sure the working time details section remains open
+                const workingTimeItem = document.querySelector(
+                    `.working-time-item[data-id="${workingTimeId}"]`,
+                );
+                if (workingTimeItem) {
+                    const detailsSection = workingTimeItem.querySelector(
+                        ".working-time-details",
+                    );
+                    if (detailsSection) {
+                        detailsSection.classList.remove("d-none");
+                    }
+                }
+
+                // If this is "Save and Add New", reset the form for another entry
+                if (saveAndAddNew) {
+                    // Clear the saveAndAddNew flag
+                    delete form.dataset.saveAndAddNew;
+                    
+                    // Reset form for a new entry, but keep the working time ID
+                    form.reset();
+                    delete form.dataset.taskId;
+                    
+                    // Reset task selection UI
+                    const taskIdInput = document.getElementById("selected-task-id");
+                    const taskNameDisplay = document.getElementById("selected-task-name");
+                    const selectedTaskContainer = document.getElementById("selected-task-container");
+                    
+                    if (taskIdInput) taskIdInput.value = "";
+                    if (taskNameDisplay) taskNameDisplay.textContent = "";
+                    if (selectedTaskContainer) selectedTaskContainer.classList.add("d-none");
+                    
+                    // Set default duration (considering updated remaining time)
+                    const durationInput = document.getElementById("time-allocation-duration");
+                    if (durationInput) {
+                        // Use the updated remaining time from the response if available
+                        const remainingMinutes = data.remaining_duration || 60;
+                        const defaultDuration = Math.min(60, remainingMinutes);
+                        durationInput.value = defaultDuration > 0 ? defaultDuration : 60;
+                    }
+                    
+                    // Update stored allocations with the new data
+                    workingTimeAllocations.set(workingTimeId, {
+                        allocations: data.ui_project_times || [],
+                        remainingDuration: data.remaining_duration || 0,
+                        isFullyAllocated: data.is_fully_allocated || false,
+                        workingDuration: data.working_duration || 0
+                    });
+                    
+                    // Update the form's current allocations dataset for the preview system
+                    form.dataset.currentAllocations = JSON.stringify(data.ui_project_times || []);
+                    
+                    // Update the form's remaining duration for the duration button highlighting
+                    form.dataset.remainingDuration = data.remaining_duration || 0;
+                    
+                    // Clear any existing alerts and show a helpful message
+                    const modalAlerts = document.querySelector("#time-allocation-modal .modal-alerts");
+                    if (modalAlerts) {
+                        const remainingMinutes = data.remaining_duration || 0;
+                        if (remainingMinutes > 0) {
+                            modalAlerts.innerHTML = `
+                                <div class="alert alert-success">
+                                    <i class="bi bi-check-circle me-2"></i>
+                                    Time allocation saved! You have <strong>${formatDuration(remainingMinutes)}</strong> remaining to allocate.
+                                </div>
+                            `;
+                        } else {
+                            modalAlerts.innerHTML = `
+                                <div class="alert alert-warning">
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                    Time allocation saved! This working time is now fully allocated.
+                                </div>
+                            `;
+                        }
+                    }
+                    
+                    // Update button states and preview
+                    updateSaveButtonState();
+                    updateTimeAllocationPreview();
+                    
+                    // Trigger custom event to update duration button highlighting
+                    setTimeout(() => {
+                        document.dispatchEvent(new CustomEvent('updateDurationButtons'));
+                    }, 50);
+                    
+                    // Focus on task search for quick entry
+                    const taskSearchInput = document.getElementById("task-search");
+                    if (taskSearchInput) {
+                        setTimeout(() => taskSearchInput.focus(), 100);
+                    }
+                }
+            }
+        });
+
+        return data;
+    } finally {
+        // Reset UI elements regardless of success or failure
+        resetUIElements({
+            submitBtn: submitBtn,
+            saveAndAddNewBtn: document.getElementById("save-and-add-new-btn")
+        }, {
+            submitBtn: {
+                disabled: false,
+                innerHTML: "Save",
+                classList: { remove: ["btn-processing"] }
+            },
+            saveAndAddNewBtn: {
+                disabled: false,
+                innerHTML: "Save and Add New",
+                classList: { remove: ["btn-processing"] }
+            }
+        });
+
         // Clear the saveAndAddNew flag if it exists
         if (form && form.dataset.saveAndAddNew) {
             delete form.dataset.saveAndAddNew;
@@ -724,57 +669,15 @@ async function deleteTimeAllocation(taskId, workingTimeId) {
 
     try {
         const requestUrl = `/api/working-times/${workingTimeId}/ui-project-times/${taskId}`;
-        const requestMethod = "DELETE";
         
-        // Send delete request
-        const response = await fetch(requestUrl, {
-            method: requestMethod,
+        // Use the enhanced fetch wrapper with automatic error handling
+        const data = await fetchWithErrorHandling(requestUrl, {
+            method: "DELETE",
+        }, {
+            operation: "delete time allocation",
+            workingTimeId: workingTimeId,
+            taskId: taskId
         });
-
-        // Check response with enhanced error handling
-        if (!response.ok) {
-            let responseData;
-            let responseText;
-            
-            try {
-                responseText = await response.text();
-                responseData = JSON.parse(responseText);
-            } catch (parseError) {
-                responseData = { error: `Server returned ${response.status}: ${responseText || 'Unknown error'}` };
-            }
-
-            // Collect response headers for debugging
-            const responseHeaders = {};
-            response.headers.forEach((value, key) => {
-                responseHeaders[key] = value;
-            });
-
-            // Log detailed error information
-            const errorContext = {
-                requestUrl: requestUrl,
-                requestMethod: requestMethod,
-                responseStatus: response.status,
-                responseData: responseData,
-                responseHeaders: responseHeaders,
-                workingTimeId: workingTimeId,
-                taskId: taskId,
-                browserInfo: {
-                    userAgent: navigator.userAgent,
-                    language: navigator.language,
-                    cookieEnabled: navigator.cookieEnabled
-                }
-            };
-
-            const errorMessage = responseData.error || `HTTP ${response.status}: Failed to delete time allocation`;
-            const apiError = new Error(errorMessage);
-            
-            logApiError("delete time allocation", apiError, errorContext);
-            
-            throw apiError;
-        }
-
-        // Parse response data
-        const data = await response.json();
 
         // Show success message
         showAlert("Time allocation deleted successfully", "success");
@@ -784,16 +687,17 @@ async function deleteTimeAllocation(taskId, workingTimeId) {
 
         return data;
     } catch (error) {
-        // Enhanced error logging is already done in the try block via logApiError
-        showAlert(`Error: ${error.message}`, "danger");
-        
-        // Log a summary to console as well for quick reference
-        console.error("Time allocation delete failed:", error.message);
-
-        // Reset opacity
-        if (timeAllocationItem) {
-            timeAllocationItem.style.opacity = "1";
-        }
+        // Use the centralized error handler
+        handleUIError(error, {
+            operation: "delete time allocation",
+            modalContext: false,
+            fallbackAction: () => {
+                // Reset opacity on error
+                if (timeAllocationItem) {
+                    timeAllocationItem.style.opacity = "1";
+                }
+            }
+        });
     }
 }
 
