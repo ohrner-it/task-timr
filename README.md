@@ -121,7 +121,7 @@ All deployment methods include:
 - Proper security configurations
 - Performance optimizations
 
-See the [Developer Guide](README.Developer%20Guide.md) for detailed deployment instructions.
+See the [Developer Guide](doc/README.Developer%20Guide.md) for detailed deployment instructions.
 
 ## License
 
