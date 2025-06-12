@@ -22,6 +22,8 @@ This application provides an alternative frontend for Timr.com that simplifies t
 
 ## Features
 
+![Task Timr Main Interface](doc/main-interface.png)
+
 - **Simple Working Time Management**: Create, edit, and delete working times with intuitive controls
 - **Task-Focused Time Tracking**: Focus on how much time was spent on tasks, not when exactly
 - **Remaining Time Visualization**: Clear visual indicator of allocated vs. remaining time
@@ -58,9 +60,9 @@ The application uses a layered architecture:
 
 ## Quick Start
 
-For detailed installation instructions and development setup, see the [Developer Guide](README.Developer%20Guide.md).
+For detailed installation instructions and development setup, see the [Developer Guide](doc/README.Developer%20Guide.md).
 
-For comprehensive usage instructions and keyboard shortcuts, see the [User Guide](README.User%20Guide.md).
+For comprehensive usage instructions and keyboard shortcuts, see the [User Guide](doc/README.User%20Guide.md).
 
 ## Deployment
 
@@ -129,6 +131,6 @@ Copyright (c) 2025 Ohrner IT GmbH
 
 ## Documentation
 
-- **[User Guide](README.User%20Guide.md)** - Complete usage instructions and keyboard shortcuts
-- **[Developer Guide](README.Developer%20Guide.md)** - Installation, development setup, and architecture details  
-- **[Testing Guide](README.Testing%20Guide.md)** - Testing framework, naming conventions, and the Ten Laws for Unit Tests
+- **[User Guide](doc/README.User%20Guide.md)** - Complete usage instructions and keyboard shortcuts
+- **[Developer Guide](doc/README.Developer%20Guide.md)** - Installation, development setup, and architecture details  
+- **[Testing Guide](doc/README.Testing%20Guide.md)** - Testing framework, naming conventions, and the Ten Laws for Unit Tests
