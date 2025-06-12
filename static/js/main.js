@@ -17,7 +17,8 @@ import {
 } from './modules/time-utils.js';
 import { escapeHtml, extractTimeRangeFromWorkingTime } from './modules/dom-utils.js';
 import { saveExpandedState, getExpandedStates, findMostRecentlyExpandedWorkingTime } from './modules/state-management.js';
-import { logMessage, showAlert, debounce } from './modules/ui-utils.js';
+import { logMessage, showAlert, debounce, logApiError } from './modules/ui-utils.js';
+import { fetchWithErrorHandling, handleApiResponse } from './modules/error-handler.js';
 import { sortWorkingTimesLatestFirst, sortTasksAlphabetically } from './modules/sorting-utils.js';
 import { openTimeAllocationModal, openDistributeTimeModal, fetchUIProjectTimes, renderUIProjectTimes, renderTimeAllocationProgress } from './project-time-handler.js';
 
@@ -659,7 +660,12 @@ document.addEventListener("DOMContentLoaded", function () {
             .then(() => {
                 // Fetch working times from API
                 return fetch(`/api/working-times?date=${dateString}`)
-                    .then(handleApiResponse);
+                    .then(response => handleApiResponse(response, {
+                        operation: "fetch working times",
+                        requestUrl: `/api/working-times?date=${dateString}`,
+                        requestMethod: "GET",
+                        date: dateString
+                    }));
             })
             .then((data) => {
                 state.workingTimes = data.data || [];
@@ -1257,11 +1263,13 @@ document.addEventListener("DOMContentLoaded", function () {
             workingTimeItem.style.opacity = "0.5";
         }
 
-        // Send delete request
-        fetch(`/api/working-times/${workingTimeId}`, {
+        // Send delete request using enhanced error handling
+        fetchWithErrorHandling(`/api/working-times/${workingTimeId}`, {
             method: "DELETE",
+        }, {
+            operation: "delete working time",
+            workingTimeId: workingTimeId
         })
-            .then(handleApiResponse)
             .then((data) => {
                 // Show success message
                 showAlert("Working time deleted successfully", "success");
@@ -1709,24 +1717,49 @@ document.addEventListener("DOMContentLoaded", function () {
     // showAlert is now defined as a global function at the top of this file
 
     /**
-     * Handle API response with error checking
+     * Handle API response with enhanced error checking and logging
      */
-    function handleApiResponse(response) {
+    async function handleApiResponse(response, requestContext = {}) {
         if (!response.ok) {
-            if (response.status === 401) {
-                throw new Error("Please log in to your Timr account to view and manage working times");
-            }
+            let responseData;
+            let responseText;
             
-            return response.json().then((data) => {
-                throw new Error(data.error || `Server error (${response.status})`);
-            }).catch((jsonError) => {
-                // Re-throw if this is our intentional error with the API message
-                if (jsonError.message && !jsonError.message.startsWith('Unexpected')) {
-                    throw jsonError;
-                }
-                // JSON parsing failed
-                throw new Error(`Server error (${response.status})`);
+            try {
+                responseText = await response.text();
+                responseData = JSON.parse(responseText);
+            } catch (parseError) {
+                responseData = { error: `Server returned ${response.status}: ${responseText || 'Unknown error'}` };
+            }
+
+            // Collect response headers for debugging
+            const responseHeaders = {};
+            response.headers.forEach((value, key) => {
+                responseHeaders[key] = value;
             });
+
+            // Prepare enhanced error context
+            const errorContext = {
+                ...requestContext,
+                responseStatus: response.status,
+                responseData: responseData,
+                responseHeaders: responseHeaders,
+                browserInfo: {
+                    userAgent: navigator.userAgent,
+                    language: navigator.language,
+                    cookieEnabled: navigator.cookieEnabled
+                }
+            };
+
+            const errorMessage = response.status === 401 
+                ? "Please log in to your Timr account to view and manage working times"
+                : (responseData.error || `Server error (${response.status})`);
+            
+            const apiError = new Error(errorMessage);
+            
+            // Log the error with detailed context
+            logApiError(requestContext.operation || "API request", apiError, errorContext);
+            
+            throw apiError;
         }
         return response.json();
     }

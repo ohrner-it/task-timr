@@ -70,23 +70,43 @@ class EnhancedTimrIntegrationTest(unittest.TestCase):
         if not hasattr(cls, 'api') or not cls.api.token:
             return
 
+        cleanup_summary = {"working_times": 0, "project_times": 0, "errors": 0}
+
+        # Delete all test project times first (before working times to avoid FK constraints)
+        for pt_id in cls.test_project_times:
+            try:
+                cls.api.delete_project_time(pt_id)
+                logger.info(f"Deleted test project time {pt_id}")
+                cleanup_summary["project_times"] += 1
+            except TimrApiError as e:
+                logger.warning(f"Could not delete test project time {pt_id}: {e}")
+                cleanup_summary["errors"] += 1
+
         # Delete all test working times (this should also delete associated project times)
         for wt_id in cls.test_working_times:
             try:
                 cls.api.delete_working_time(wt_id)
                 logger.info(f"Deleted test working time {wt_id}")
+                cleanup_summary["working_times"] += 1
             except TimrApiError as e:
-                logger.warning(
-                    f"Could not delete test working time {wt_id}: {e}")
+                logger.warning(f"Could not delete test working time {wt_id}: {e}")
+                cleanup_summary["errors"] += 1
 
-        # Delete any remaining test project times
-        for pt_id in cls.test_project_times:
-            try:
-                cls.api.delete_project_time(pt_id)
-                logger.info(f"Deleted test project time {pt_id}")
-            except TimrApiError as e:
-                logger.warning(
-                    f"Could not delete test project time {pt_id}: {e}")
+        logger.info(f"Enhanced test cleanup complete: {cleanup_summary['working_times']} working times, "
+                   f"{cleanup_summary['project_times']} project times deleted. "
+                   f"{cleanup_summary['errors']} errors encountered.")
+
+    def _track_working_time(self, working_time_id):
+        """Track a working time for cleanup, avoiding duplicates."""
+        if working_time_id not in self.test_working_times:
+            self.test_working_times.append(working_time_id)
+            logger.debug(f"Tracking working time for cleanup: {working_time_id}")
+
+    def _track_project_time(self, project_time_id):
+        """Track a project time for cleanup, avoiding duplicates."""
+        if project_time_id not in self.test_project_times:
+            self.test_project_times.append(project_time_id)
+            logger.debug(f"Tracking project time for cleanup: {project_time_id}")
 
     def setUp(self):
         """Set up each test with API call tracking."""
@@ -476,7 +496,7 @@ class EnhancedTimrIntegrationTest(unittest.TestCase):
                                           end=end,
                                           pause_duration=pause_duration)
 
-        self.test_working_times.append(wt["id"])
+        self._track_working_time(wt["id"])
         return wt
 
     def _find_bookable_task(self, tasks):

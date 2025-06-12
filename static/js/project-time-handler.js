@@ -10,6 +10,7 @@ import { parseJiraDuration, isReasonableDuration, JIRA_PARSE_DELAY_MS } from './
 import { formatDuration } from './modules/time-utils.js';
 import { escapeHtml } from './modules/dom-utils.js';
 import { logMessage, showAlert } from './modules/ui-utils.js';
+import { fetchWithErrorHandling, handleFormSubmission, resetUIElements, handleUIError } from './modules/error-handler.js';
 import { sortUIProjectTimesAlphabetically } from './modules/sorting-utils.js';
 
 // Global state to store current allocations per working time
@@ -252,12 +253,13 @@ function setupTimeAllocationFormListeners() {
     // Handle "Save and Add New" button
     const saveAndAddNewBtn = document.getElementById("save-and-add-new-btn");
     if (saveAndAddNewBtn) {
-        saveAndAddNewBtn.addEventListener("click", function () {
-            // Trigger form submission but mark it as "save and add new"
+        saveAndAddNewBtn.addEventListener("click", function (event) {
+            // Mark as "save and add new" and call the function directly
             const form = document.getElementById("time-allocation-form");
             if (form) {
                 form.dataset.saveAndAddNew = "true";
-                form.dispatchEvent(new Event("submit"));
+                // Call saveTimeAllocation directly instead of dispatching synthetic event
+                saveTimeAllocation(event);
             }
         });
     }
@@ -350,7 +352,19 @@ function handleUIProjectTimeResponse(data, workingTimeId) {
  *
  * @returns {Promise<Object>} - Response data
  */
-async function saveTimeAllocation() {
+async function saveTimeAllocation(event) {
+    // Prevent default form submission to keep modal open
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        // Prevent double submissions from synthetic events
+        if (event.isTrusted === false && event.type === 'submit') {
+            console.log('Ignoring synthetic submit event to prevent double submission');
+            return;
+        }
+    }
+    
     const form = document.getElementById("time-allocation-form");
     if (!form) return;
 
@@ -438,56 +452,59 @@ async function saveTimeAllocation() {
             '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
     }
 
-    try {
-        let response;
+    const submitOperation = async () => {
+        let requestData;
+        let requestUrl;
+        let requestMethod;
 
         if (taskId) {
             // For editing an existing UI time allocation, use PATCH
-            const data = {
+            requestData = {
                 duration_minutes: duration,
                 task_name: taskName,
             };
-
-            response = await fetch(
-                `/api/working-times/${workingTimeId}/ui-project-times/${taskId}`,
-                {
-                    method: "PATCH",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(data),
-                },
-            );
+            requestUrl = `/api/working-times/${workingTimeId}/ui-project-times/${taskId}`;
+            requestMethod = "PATCH";
         } else {
             // For new UI time allocations, use POST
-            const data = {
+            requestData = {
                 task_id: selectedTaskId,
                 task_name: taskName,
                 task_breadcrumbs: taskBreadcrumbs,
                 duration_minutes: duration,
             };
-
-            response = await fetch(
-                `/api/working-times/${workingTimeId}/ui-project-times`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(data),
-                },
-            );
+            requestUrl = `/api/working-times/${workingTimeId}/ui-project-times`;
+            requestMethod = "POST";
         }
 
-        // Check response
-        if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.error || "Failed to save time allocation");
-        }
+        // Log request details for debugging Firefox issues
+        console.log(`Making ${requestMethod} request to: ${requestUrl}`);
+        console.log('Request data:', JSON.stringify(requestData));
+        console.log('Working time ID:', workingTimeId);
+        
+        // Use the enhanced fetch wrapper with debugging context
+        const data = await fetchWithErrorHandling(requestUrl, {
+            method: requestMethod,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            body: JSON.stringify(requestData),
+        }, {
+            operation: "save time allocation",
+            workingTimeId: workingTimeId,
+            taskId: taskId,
+            selectedTaskId: selectedTaskId,
+            duration: duration
+        });
 
-        // Parse response data
-        const data = await response.json();
+        return data;
+    };
 
+    try {
+        const data = await submitOperation();
+
+        // Success - execute success logic
         // Check if this is a "Save and Add New" operation
         const saveAndAddNew = form.dataset.saveAndAddNew === "true";
         
@@ -622,31 +639,39 @@ async function saveTimeAllocation() {
 
         return data;
     } catch (error) {
-        console.error("Error:", error);
-        showAlert(`Error: ${error.message}`, "danger", true);
+        // Show error in modal and keep it open
+        const modalAlerts = document.querySelector("#time-allocation-modal .modal-alerts");
+        if (modalAlerts) {
+            modalAlerts.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    ${error.message}
+                </div>
+            `;
+        }
+        
+        // Log detailed error information
+        console.error(`API Error: save time allocation | Message: ${error.message} | Request: POST /api/working-times/${workingTimeId}/ui-project-times | Request data: ${JSON.stringify({task_id: selectedTaskId, task_name: taskName, duration_minutes: duration})} | Browser: ${navigator.userAgent.split(' ')[0]} | Timestamp: ${new Date().toISOString()}`);
+        
+        return null;
     } finally {
-        // Reset both buttons
-        let submitBtn = document.querySelector(
-            `button[type="submit"][form="${form.id}"]`,
-        );
-        if (!submitBtn) {
-            submitBtn = form.querySelector('button[type="submit"]');
-        }
-        
-        const saveAndAddNewBtn = document.getElementById("save-and-add-new-btn");
+        // Reset UI elements regardless of success or failure
+        resetUIElements({
+            submitBtn: submitBtn,
+            saveAndAddNewBtn: document.getElementById("save-and-add-new-btn")
+        }, {
+            submitBtn: {
+                disabled: false,
+                innerHTML: "Save",
+                classList: { remove: ["btn-processing"] }
+            },
+            saveAndAddNewBtn: {
+                disabled: false,
+                innerHTML: "Save and Add New",
+                classList: { remove: ["btn-processing"] }
+            }
+        });
 
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = "Save";
-            submitBtn.classList.remove("btn-processing");
-        }
-        
-        if (saveAndAddNewBtn) {
-            saveAndAddNewBtn.disabled = false;
-            saveAndAddNewBtn.innerHTML = "Save and Add New";
-            saveAndAddNewBtn.classList.remove("btn-processing");
-        }
-        
         // Clear the saveAndAddNew flag if it exists
         if (form && form.dataset.saveAndAddNew) {
             delete form.dataset.saveAndAddNew;
@@ -675,22 +700,16 @@ async function deleteTimeAllocation(taskId, workingTimeId) {
     }
 
     try {
-        // Send delete request
-        const response = await fetch(
-            `/api/working-times/${workingTimeId}/ui-project-times/${taskId}`,
-            {
-                method: "DELETE",
-            },
-        );
-
-        // Check response
-        if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.error || "Failed to delete time allocation");
-        }
-
-        // Parse response data
-        const data = await response.json();
+        const requestUrl = `/api/working-times/${workingTimeId}/ui-project-times/${taskId}`;
+        
+        // Use the enhanced fetch wrapper with automatic error handling
+        const data = await fetchWithErrorHandling(requestUrl, {
+            method: "DELETE",
+        }, {
+            operation: "delete time allocation",
+            workingTimeId: workingTimeId,
+            taskId: taskId
+        });
 
         // Show success message
         showAlert("Time allocation deleted successfully", "success");
@@ -700,13 +719,17 @@ async function deleteTimeAllocation(taskId, workingTimeId) {
 
         return data;
     } catch (error) {
-        console.error("Error:", error);
-        showAlert(`Error: ${error.message}`, "danger");
-
-        // Reset opacity
-        if (timeAllocationItem) {
-            timeAllocationItem.style.opacity = "1";
-        }
+        // Use the centralized error handler
+        handleUIError(error, {
+            operation: "delete time allocation",
+            modalContext: false,
+            fallbackAction: () => {
+                // Reset opacity on error
+                if (timeAllocationItem) {
+                    timeAllocationItem.style.opacity = "1";
+                }
+            }
+        });
     }
 }
 
