@@ -2,6 +2,8 @@
 
 This guide will help you quickly get started with Task Timr, the task duration-focused alternative frontend to Timr.com.
 
+![Task Timr Main Interface](main-interface.png)
+
 ## Core Concept
 
 Task Timr simplifies time tracking by focusing on **task durations** rather than exact time slots. Instead of specifying when exactly you worked on each task, you simply:
@@ -42,6 +44,8 @@ You can navigate between dates in three ways:
 
 ### Adding a Working Time
 
+![New Working Time Dialog](new-working-time.png)
+
 1. Click the **Add Working Time** button (or press **Alt+N**)
 2. Set the date, start time, end time, and break duration
 3. Select a working time type from the dropdown (required)
@@ -72,6 +76,8 @@ You can navigate between dates in three ways:
    - A table of all current time allocations
 
 ### Adding a Time Allocation
+
+![Add Time Allocation Dialog](add-time-allocation.png)
 
 1. Expand the working time details
 2. Click **Add Time** button
