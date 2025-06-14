@@ -640,12 +640,23 @@ class ProjectTimeConsolidator:
         Returns:
             list: Sanitized working time entries
         """
+
         if not work_times:
             return []
 
-        # Sort work times by start time
-        sorted_work_times = sorted(work_times,
-                                   key=lambda wt: wt.get("start", ""))
+        # Filter out invalid entries that are not dictionaries
+        valid_work_times = [
+            wt for wt in work_times if isinstance(wt, dict)
+        ]
+
+        if not valid_work_times:
+            return []
+
+        # Sort work times by start time, handling missing values gracefully
+        sorted_work_times = sorted(
+            valid_work_times,
+            key=lambda wt: wt.get("start") or "",
+        )
 
         # Check for overlaps and adjust end times
         sanitized_work_times = [sorted_work_times[0]]
