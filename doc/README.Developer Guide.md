@@ -17,11 +17,12 @@ To contribute to the development:
 #### Quick Setup (Recommended)
 
 1. Clone this repository
-2. Run the setup script:
+2. Run the setup script (requires Python 3.10+ and npm):
    ```bash
    chmod +x setup.sh
    ./setup.sh
    ```
+   The script installs Python and Node.js dependencies, running `npm install` automatically.
 3. Configure your environment:
    ```bash
    cp .env.example .env
@@ -45,12 +46,16 @@ To contribute to the development:
    ```bash
    pip install -e .
    ```
-4. Configure environment variables:
+4. Install frontend dependencies:
+   ```bash
+   npm install
+   ```
+5. Configure environment variables:
    ```bash
    cp .env.example .env
    # Edit .env with your actual Timr.com credentials
    ```
-5. Run the application:
+6. Run the application:
    ```bash
    # Using the start script (recommended):
    ./start.sh

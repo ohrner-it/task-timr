@@ -59,4 +59,3 @@ These guidelines apply to the entire repository.
   pull request.
 - Pull request descriptions should summarise **all** changes contained in the
   pull request and mention the test results.
-

@@ -38,6 +38,19 @@ echo "✅ Virtual environment created"
 echo "🔧 Activating virtual environment..."
 source venv/bin/activate
 
+# Install npm dependencies if needed
+echo "📦 Installing npm dependencies..."
+if command -v npm >/dev/null 2>&1; then
+    if [ ! -d "node_modules" ]; then
+        npm install
+    else
+        echo "ℹ️  npm dependencies already installed"
+    fi
+else
+    echo "❌ Error: npm is not installed. Please install Node.js and npm to build frontend assets." >&2
+    exit 1
+fi
+
 # Upgrade pip
 echo "⬆️  Upgrading pip..."
 pip install --upgrade pip
