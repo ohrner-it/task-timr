@@ -57,6 +57,5 @@ These guidelines apply to the entire repository.
   line and optional details.
 - Ensure the repository is in a clean state and all tests pass before creating a
   pull request.
-- Pull request descriptions should summarise the change and mention the test
-  results.
-
+- Pull request descriptions should summarise **all** changes contained in the
+  pull request and mention the test results.
