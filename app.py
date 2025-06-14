@@ -8,7 +8,7 @@ Licensed under the MIT License
 
 import os
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from timr_api import TimrApi, TimrApiError
 from timr_utils import ProjectTimeConsolidator, UIProjectTime
@@ -336,7 +336,11 @@ def create_working_time():
         for wt in existing_working_times:
             wt_start = datetime.fromisoformat(wt['start'].replace(
                 'Z', '+00:00'))
-            wt_end = datetime.fromisoformat(wt['end'].replace('Z', '+00:00'))
+            if wt.get('end'):
+                wt_end = datetime.fromisoformat(wt['end'].replace('Z', '+00:00'))
+            else:
+                # Treat running working times as continuing indefinitely
+                wt_end = datetime.now(timezone.utc)
 
             # Check for overlap
             if (start_dt < wt_end and end_dt > wt_start):
@@ -929,12 +933,17 @@ def replace_ui_project_times(working_time_id):
 
         # Get available time
         start_str = working_time.get("start", "").replace('Z', '+00:00')
-        end_str = working_time.get("end", "").replace('Z', '+00:00')
+        end_str = working_time.get("end")
+        if end_str:
+            end_str = end_str.replace('Z', '+00:00')
         break_duration = working_time.get("break_time_total_minutes", 0)
 
         try:
             work_start = datetime.fromisoformat(start_str)
-            work_end = datetime.fromisoformat(end_str)
+            if end_str:
+                work_end = datetime.fromisoformat(end_str)
+            else:
+                work_end = datetime.now(timezone.utc)
             available_minutes = int(
                 (work_end - work_start).total_seconds() / 60) - break_duration
 
