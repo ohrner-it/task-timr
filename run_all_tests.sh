@@ -1,5 +1,14 @@
 #!/bin/bash
 
+# Activate Python virtual environment when available
+if [ -d "venv" ]; then
+    echo "Activating Python virtual environment..."
+    if ! source venv/bin/activate; then
+        echo "Failed to activate virtual environment" >&2
+        exit 1
+    fi
+fi
+
 # Run Python tests
 echo "====================== Running Python Tests ======================"
 python3 run_tests.py
