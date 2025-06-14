@@ -802,15 +802,10 @@ document.addEventListener("DOMContentLoaded", function () {
      * Render a working time card
      */
     function renderWorkingTimeCard(workingTime) {
-        const startTime = new Date(workingTime.start);
-        const endTime = new Date(workingTime.end);
         const workingTimeId = workingTime.id;
 
-        // Calculate duration
-        const durationMinutes = calculateDurationInMinutes(
-            workingTime.start,
-            workingTime.end,
-        );
+        // Calculate duration, using ongoing duration when end is missing
+        const durationMinutes = getWorkingTimeDuration(workingTime);
         let breakMinutes = workingTime.break_time_total_minutes || 0;
 
         // Calculate net duration (working time minus break)
@@ -1103,7 +1098,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const endTimeInput = form.querySelector("#working-time-end");
         if (endTimeInput) {
-            endTimeInput.value = formatTimeFromISOString(workingTime.end);
+            endTimeInput.value = workingTime.end
+                ? formatTimeFromISOString(workingTime.end)
+                : "";
         }
 
         const pauseDurationInput = form.querySelector("#working-time-pause");
@@ -1701,7 +1698,13 @@ document.addEventListener("DOMContentLoaded", function () {
      * Format an ISO date string as HH:MM
      */
     function formatTimeFromISOString(isoString) {
+        if (!isoString) {
+            return "...";
+        }
         const date = new Date(isoString);
+        if (isNaN(date)) {
+            return "...";
+        }
         return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
     }
 
@@ -1712,6 +1715,20 @@ document.addEventListener("DOMContentLoaded", function () {
         const start = new Date(startIsoString);
         const end = new Date(endIsoString);
         return Math.floor((end - start) / 60000);
+    }
+
+    /**
+     * Determine duration of a working time entry
+     * Fallback to the duration field when no end is present
+     */
+    function getWorkingTimeDuration(workingTime) {
+        if (workingTime.end) {
+            return calculateDurationInMinutes(workingTime.start, workingTime.end);
+        }
+        if (workingTime.duration && typeof workingTime.duration.minutes === 'number') {
+            return workingTime.duration.minutes;
+        }
+        return 0;
     }
 
     // showAlert is now defined as a global function at the top of this file

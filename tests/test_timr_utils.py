@@ -707,6 +707,23 @@ class TestProjectTimeConsolidatorEdgeCases(unittest.TestCase):
         # Verify the result matches mock return value
         self.assertEqual(result, mock_result)
 
+    def test_consolidate_running_working_time(self):
+        """consolidate_project_times handles working times without end"""
+        working_time = {
+            "id": "wt-running",
+            "start": "2025-06-14T22:51:00+00:00",
+            "end": None,
+            "duration": {"type": "ongoing", "minutes": 30},
+            "break_time_total_minutes": 0,
+        }
+
+        self.mock_timr_api._get_project_times_in_work_time.return_value = []
+
+        result = self.consolidator.consolidate_project_times(working_time)
+
+        self.assertEqual(result["net_duration"], 30)
+        self.assertEqual(result["remaining_duration"], 30)
+
 
 if __name__ == '__main__':
     unittest.main()

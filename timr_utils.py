@@ -811,19 +811,26 @@ class ProjectTimeConsolidator:
         # Get the start and end times of the working time
         try:
             start_str = working_time.get("start", "")
-            end_str = working_time.get("end", "")
+            end_str = working_time.get("end")
 
-            if not start_str or not end_str:
-                raise ValueError("Working time must have start and end times")
+            if not start_str:
+                raise ValueError("Working time must have a start time")
 
-            # Handle different timezone formats in the API response
+            # Normalize timezone format
             if start_str.endswith('Z'):
                 start_str = start_str.replace('Z', '+00:00')
-            if end_str.endswith('Z'):
-                end_str = end_str.replace('Z', '+00:00')
 
             work_start = datetime.fromisoformat(start_str)
-            work_end = datetime.fromisoformat(end_str)
+
+            if end_str:
+                if end_str.endswith('Z'):
+                    end_str = end_str.replace('Z', '+00:00')
+                work_end = datetime.fromisoformat(end_str)
+            else:
+                duration = working_time.get("duration", {}).get("minutes")
+                if duration is None:
+                    raise ValueError("Working time missing end time and duration")
+                work_end = work_start + timedelta(minutes=duration)
             work_duration = int((work_end - work_start).total_seconds() / 60)
             logger.info(
                 f"CONSOLIDATE: Working time duration: {work_duration} minutes")
