@@ -727,11 +727,18 @@ class TimrApi:
             list: Project times within the working time
         """
         try:
-            # Parse the start and end times
-            work_start = datetime.datetime.fromisoformat(
-                work_time_entry["start"].replace("Z", "+00:00"))
-            work_end = datetime.datetime.fromisoformat(
-                work_time_entry["end"].replace("Z", "+00:00"))
+            # Parse the start time
+            work_start_str = work_time_entry["start"].replace("Z", "+00:00")
+            work_start = datetime.datetime.fromisoformat(work_start_str)
+
+            # Determine end time, falling back to duration when absent
+            work_end_str = work_time_entry.get("end")
+            if work_end_str:
+                work_end_str = work_end_str.replace("Z", "+00:00")
+                work_end = datetime.datetime.fromisoformat(work_end_str)
+            else:
+                duration = work_time_entry.get("duration", {}).get("minutes", 0)
+                work_end = work_start + datetime.timedelta(minutes=duration)
 
             # Format dates for API query
             start_date = work_start.date()

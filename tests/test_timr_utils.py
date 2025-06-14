@@ -207,31 +207,13 @@ class TestProjectTimeConsolidator(unittest.TestCase):
     def test_consolidate_project_times_empty_project_times(self):
         """Test consolidation with no project times"""
         self.mock_timr_api._get_project_times_in_work_time.return_value = []
-
+        
         result = self.consolidator.consolidate_project_times(self.working_time)
         
         self.assertEqual(len(result['ui_project_times']), 0)
         self.assertEqual(result['net_duration'], 450)
         self.assertEqual(result['remaining_duration'], 450)
         self.assertFalse(result['is_fully_allocated'])
-
-    def test_consolidate_project_times_ongoing(self):
-        """Working time without end should use duration field"""
-        ongoing_wt = {
-            "id": "wt_running",
-            "start": "2025-04-01T09:00:00+00:00",
-            "end": None,
-            "duration": {"type": "ongoing", "minutes": 120},
-            "break_time_total_minutes": 30,
-        }
-
-        self.mock_timr_api._get_project_times_in_work_time.return_value = []
-
-        result = self.consolidator.consolidate_project_times(ongoing_wt)
-
-        # Net duration should be duration minutes minus break
-        self.assertEqual(result['net_duration'], 90)
-        self.assertEqual(result['remaining_duration'], 90)
 
     def test_consolidate_project_times_fully_allocated(self):
         """Test consolidation when time is fully allocated"""

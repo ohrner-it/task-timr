@@ -803,19 +803,14 @@ document.addEventListener("DOMContentLoaded", function () {
      */
     function renderWorkingTimeCard(workingTime) {
         const startTime = new Date(workingTime.start);
-        const endTime = workingTime.end ? new Date(workingTime.end) : new Date();
+        const endTime = new Date(workingTime.end);
         const workingTimeId = workingTime.id;
 
         // Calculate duration
-        const durationMinutes = workingTime.end
-            ? calculateDurationInMinutes(
-                  workingTime.start,
-                  workingTime.end,
-              )
-            : workingTime.duration?.minutes || calculateDurationInMinutes(
-                  workingTime.start,
-                  null,
-              );
+        const durationMinutes = calculateDurationInMinutes(
+            workingTime.start,
+            workingTime.end,
+        );
         let breakMinutes = workingTime.break_time_total_minutes || 0;
 
         // Calculate net duration (working time minus break)
@@ -834,7 +829,7 @@ document.addEventListener("DOMContentLoaded", function () {
             <div class="card mb-3 working-time-item" data-id="${workingTimeId}" data-editable="${isEditable}">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="me-3 fw-bold">${formatTimeFromISOString(workingTime.start)} - ${workingTime.end ? formatTimeFromISOString(workingTime.end) : '...'}</span>
+                        <span class="me-3 fw-bold">${formatTimeFromISOString(workingTime.start)} - ${formatTimeFromISOString(workingTime.end)}</span>
                         ${isEditable ? 
                             `<span class="badge bg-secondary">${formatDuration(netDurationMinutes)}</span>
                             ${breakMinutes > 0 ? `<span class="badge bg-info ms-1">Break: ${formatDuration(breakMinutes)}</span>` : ""}` :
@@ -1108,9 +1103,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const endTimeInput = form.querySelector("#working-time-end");
         if (endTimeInput) {
-            endTimeInput.value = workingTime.end
-                ? formatTimeFromISOString(workingTime.end)
-                : "";
+            endTimeInput.value = formatTimeFromISOString(workingTime.end);
         }
 
         const pauseDurationInput = form.querySelector("#working-time-pause");
@@ -1708,9 +1701,6 @@ document.addEventListener("DOMContentLoaded", function () {
      * Format an ISO date string as HH:MM
      */
     function formatTimeFromISOString(isoString) {
-        if (!isoString) {
-            return '';
-        }
         const date = new Date(isoString);
         return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
     }
@@ -1720,7 +1710,7 @@ document.addEventListener("DOMContentLoaded", function () {
      */
     function calculateDurationInMinutes(startIsoString, endIsoString) {
         const start = new Date(startIsoString);
-        const end = endIsoString ? new Date(endIsoString) : new Date();
+        const end = new Date(endIsoString);
         return Math.floor((end - start) / 60000);
     }
 

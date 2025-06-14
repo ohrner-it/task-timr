@@ -1,6 +1,7 @@
 import unittest
 import datetime
 import pytz
+from unittest.mock import patch
 from timr_api import TimrApi
 
 
@@ -62,6 +63,26 @@ class TestTimrApi(unittest.TestCase):
         dt_str = "2025-05-01"
         formatted = self.api._format_date_for_query(dt_str)
         self.assertEqual(formatted, "2025-05-01")
+
+    def test_get_project_times_in_work_time_handles_missing_end(self):
+        """_get_project_times_in_work_time works without end timestamp"""
+        working_time = {
+            "start": "2025-06-14T22:51:00+00:00",
+            "end": None,
+            "duration": {"type": "ongoing", "minutes": 30},
+        }
+
+        sample_pt = {
+            "id": "pt1",
+            "start": "2025-06-14T22:55:00+00:00",
+            "end": "2025-06-14T23:05:00+00:00",
+        }
+
+        with patch.object(self.api, "get_project_times", return_value=[sample_pt]) as mock_get:
+            result = self.api._get_project_times_in_work_time(working_time)
+
+        mock_get.assert_called_once()
+        self.assertEqual(result, [sample_pt])
 
 
 if __name__ == '__main__':

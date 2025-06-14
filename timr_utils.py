@@ -528,18 +528,14 @@ class ProjectTimeConsolidator:
         """
         # Parse working time boundaries
         start_str = working_time.get("start", "")
-        end_str = working_time.get("end")
+        end_str = working_time.get("end", "")
         if start_str.endswith('Z'):
             start_str = start_str.replace('Z', '+00:00')
-        if end_str and end_str.endswith('Z'):
+        if end_str.endswith('Z'):
             end_str = end_str.replace('Z', '+00:00')
 
         work_start = datetime.fromisoformat(start_str)
-        if end_str:
-            work_end = datetime.fromisoformat(end_str)
-        else:
-            duration = working_time.get("duration", {}).get("minutes", 0)
-            work_end = work_start + timedelta(minutes=duration)
+        work_end = datetime.fromisoformat(end_str)
         
         current_time = work_start
         time_slots = []
@@ -640,23 +636,12 @@ class ProjectTimeConsolidator:
         Returns:
             list: Sanitized working time entries
         """
-
         if not work_times:
             return []
 
-        # Filter out invalid entries that are not dictionaries
-        valid_work_times = [
-            wt for wt in work_times if isinstance(wt, dict)
-        ]
-
-        if not valid_work_times:
-            return []
-
-        # Sort work times by start time, handling missing values gracefully
-        sorted_work_times = sorted(
-            valid_work_times,
-            key=lambda wt: wt.get("start") or "",
-        )
+        # Sort work times by start time
+        sorted_work_times = sorted(work_times,
+                                   key=lambda wt: wt.get("start", ""))
 
         # Check for overlaps and adjust end times
         sanitized_work_times = [sorted_work_times[0]]
@@ -722,24 +707,20 @@ class ProjectTimeConsolidator:
         # Parse working time bounds
         try:
             wt_start_str = working_time.get("start", "")
-            wt_end_str = working_time.get("end")
+            wt_end_str = working_time.get("end", "")
 
-            if not wt_start_str:
-                logger.warning("Working time missing start time")
+            if not wt_start_str or not wt_end_str:
+                logger.warning("Working time missing start or end time")
                 return []
 
             # Normalize timezone format
             if wt_start_str.endswith('Z'):
                 wt_start_str = wt_start_str.replace('Z', '+00:00')
-            if wt_end_str and wt_end_str.endswith('Z'):
+            if wt_end_str.endswith('Z'):
                 wt_end_str = wt_end_str.replace('Z', '+00:00')
 
             wt_start = datetime.fromisoformat(wt_start_str)
-            if wt_end_str:
-                wt_end = datetime.fromisoformat(wt_end_str)
-            else:
-                duration = working_time.get("duration", {}).get("minutes", 0)
-                wt_end = wt_start + timedelta(minutes=duration)
+            wt_end = datetime.fromisoformat(wt_end_str)
         except (ValueError, TypeError) as e:
             logger.error(f"Error parsing working time dates: {e}")
             return []
@@ -830,23 +811,19 @@ class ProjectTimeConsolidator:
         # Get the start and end times of the working time
         try:
             start_str = working_time.get("start", "")
-            end_str = working_time.get("end")
+            end_str = working_time.get("end", "")
 
-            if not start_str:
-                raise ValueError("Working time must have start time")
+            if not start_str or not end_str:
+                raise ValueError("Working time must have start and end times")
 
             # Handle different timezone formats in the API response
             if start_str.endswith('Z'):
                 start_str = start_str.replace('Z', '+00:00')
-            if end_str and end_str.endswith('Z'):
+            if end_str.endswith('Z'):
                 end_str = end_str.replace('Z', '+00:00')
 
             work_start = datetime.fromisoformat(start_str)
-            if end_str:
-                work_end = datetime.fromisoformat(end_str)
-            else:
-                duration = working_time.get("duration", {}).get("minutes", 0)
-                work_end = work_start + timedelta(minutes=duration)
+            work_end = datetime.fromisoformat(end_str)
             work_duration = int((work_end - work_start).total_seconds() / 60)
             logger.info(
                 f"CONSOLIDATE: Working time duration: {work_duration} minutes")
