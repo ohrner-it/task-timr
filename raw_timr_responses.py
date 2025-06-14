@@ -5,6 +5,7 @@ Script to fetch and display raw, unparsed responses from the TIMR API.
 import os
 import json
 import requests
+from datetime import date
 from config import COMPANY_ID
 
 # Get credentials
@@ -68,7 +69,6 @@ if login_response.status_code == 200:
             print("=" * 50)
             
             # Get today's date for working times query
-            from datetime import date
             today = date.today()
             
             working_times_response = requests.get(
