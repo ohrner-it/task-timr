@@ -437,6 +437,29 @@ class TestProjectTimeConsolidatorEdgeCases(unittest.TestCase):
             "task_id": "task2"
         }]
 
+    def test_consolidate_open_working_time(self):
+        """Recording working time without end time is handled"""
+        working_time = {
+            "id": "wt_open",
+            "start": "2025-04-01T09:00:00+00:00",
+            "end": None,
+            "break_time_total_minutes": 30,
+        }
+
+        self.mock_timr_api._get_project_times_in_work_time.return_value = []
+
+        fixed_now = datetime.datetime(
+            2025, 4, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+        with patch('timr_utils.datetime') as mock_datetime:
+            mock_datetime.now.return_value = fixed_now
+            mock_datetime.timezone = datetime.timezone
+
+            result = self.consolidator.consolidate_project_times(working_time)
+
+        self.assertEqual(result['net_duration'], 150)
+        self.assertEqual(result['remaining_duration'], 150)
+
     def test_consolidate_project_times(self):
         """Test consolidate_project_times method"""
         # Set up mock return value - empty list means no project times

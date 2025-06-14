@@ -9,6 +9,7 @@ Licensed under the MIT License
 import json
 import logging
 from datetime import datetime, timedelta
+from utils import parse_iso_datetime
 from typing import List, Dict, Any, Optional, Set, Tuple, Union
 
 from timr_api import TimrApi, TimrApiError
@@ -810,20 +811,19 @@ class ProjectTimeConsolidator:
 
         # Get the start and end times of the working time
         try:
-            start_str = working_time.get("start", "")
-            end_str = working_time.get("end", "")
+            work_start = parse_iso_datetime(working_time.get("start"))
+            work_end = parse_iso_datetime(working_time.get("end"))
 
-            if not start_str or not end_str:
-                raise ValueError("Working time must have start and end times")
+            if not work_start:
+                raise ValueError("Working time must have a start time")
 
-            # Handle different timezone formats in the API response
-            if start_str.endswith('Z'):
-                start_str = start_str.replace('Z', '+00:00')
-            if end_str.endswith('Z'):
-                end_str = end_str.replace('Z', '+00:00')
+            if not work_end:
+                logger.warning(
+                    "Working time missing end time; assuming ongoing recording"
+                )
+                work_end = datetime.now(
+                    tz=work_start.tzinfo or datetime.timezone.utc)
 
-            work_start = datetime.fromisoformat(start_str)
-            work_end = datetime.fromisoformat(end_str)
             work_duration = int((work_end - work_start).total_seconds() / 60)
             logger.info(
                 f"CONSOLIDATE: Working time duration: {work_duration} minutes")
