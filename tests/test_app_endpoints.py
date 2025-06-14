@@ -327,6 +327,40 @@ class TestUIProjectTimeEndpoints(unittest.TestCase):
         self.mock_timr_api.get_working_time.assert_called_once_with('wt123')
         self.mock_consolidator.replace_ui_project_times.assert_called_once()
 
+    def test_replace_ui_project_times_recording(self):
+        """Ensure open working times without an end do not cause errors."""
+        working_time = {
+            "id": "wt123",
+            "start": "2025-04-01T09:00:00Z",
+            "end": None,
+            "break_time_total_minutes": 0,
+        }
+        self.mock_timr_api.get_working_time.return_value = working_time
+
+        ui_pt = UIProjectTime("task1", "Task 1", 60, "Project A/Task 1")
+        self.mock_consolidator.replace_ui_project_times.return_value = {
+            "working_time": working_time,
+            "ui_project_times": [ui_pt],
+            "consolidated_project_times": [ui_pt.to_dict()],
+            "total_duration": 60,
+            "net_duration": 60,
+            "remaining_duration": 0,
+            "is_fully_allocated": True,
+            "is_over_allocated": False,
+        }
+
+        response = self.app.put(
+            '/api/working-times/wt123/ui-project-times',
+            json={"ui_project_times": [{"task_id": "task1", "task_name": "Task 1", "duration_minutes": 60}]},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(len(data['ui_project_times']), 1)
+        self.mock_timr_api.get_working_time.assert_called_once_with('wt123')
+        self.mock_consolidator.replace_ui_project_times.assert_called_once()
+
     def test_unauthorized_access(self):
         """Test that unauthorized access is properly handled."""
         # Configure get_current_user to return None to simulate unauthorized access

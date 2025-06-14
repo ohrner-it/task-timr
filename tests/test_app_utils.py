@@ -1,103 +1,15 @@
 import unittest
-import datetime
 import json
 from unittest.mock import patch, MagicMock
-from app import parse_date, parse_time, combine_datetime, format_duration, get_working_times, get_project_times
-from config import DATE_FORMAT, TIME_FORMAT
-from timr_api import TimrApi
 from timr_utils import UIProjectTime
-
-class TestAppUtils(unittest.TestCase):
-    """Test utilities from app.py"""
-    
-    def test_parse_date(self):
-        """Test that date parsing works with different formats."""
-        # Test standard format (YYYY-MM-DD)
-        date_str = "2025-05-01"
-        date = parse_date(date_str)
-        self.assertIsNotNone(date)
-        self.assertEqual(date.year, 2025)
-        self.assertEqual(date.month, 5)
-        self.assertEqual(date.day, 1)
-        
-        # Test ISO format with time
-        date_str = "2025-05-01T10:30:00Z"
-        date = parse_date(date_str)
-        self.assertIsNotNone(date)
-        self.assertEqual(date.year, 2025)
-        self.assertEqual(date.month, 5)
-        self.assertEqual(date.day, 1)
-        
-        # Test invalid format
-        date_str = "05/01/2025"
-        date = parse_date(date_str)
-        self.assertIsNone(date)
-        
-        # Test None
-        date = parse_date(None)
-        self.assertIsNone(date)
-    
-    def test_parse_time(self):
-        """Test that time parsing works with different formats."""
-        # Test standard format (HH:MM)
-        time_str = "10:30"
-        time = parse_time(time_str)
-        self.assertIsNotNone(time)
-        self.assertEqual(time.hour, 10)
-        self.assertEqual(time.minute, 30)
-        
-        # Test ISO format with date
-        time_str = "2025-05-01T10:30:00Z"
-        time = parse_time(time_str)
-        self.assertIsNotNone(time)
-        self.assertEqual(time.hour, 10)
-        self.assertEqual(time.minute, 30)
-        
-        # Test invalid format
-        time_str = "10:30 AM"
-        time = parse_time(time_str)
-        self.assertIsNone(time)
-        
-        # Test None
-        time = parse_time(None)
-        self.assertIsNone(time)
-    
-    def test_combine_datetime(self):
-        """Test combining date and time."""
-        date = datetime.date(2025, 5, 1)
-        time = datetime.time(10, 30)
-        dt = combine_datetime(date, time)
-        self.assertEqual(dt.year, 2025)
-        self.assertEqual(dt.month, 5)
-        self.assertEqual(dt.day, 1)
-        self.assertEqual(dt.hour, 10)
-        self.assertEqual(dt.minute, 30)
-    
-    def test_format_duration(self):
-        """Test formatting duration in minutes to hours and minutes."""
-        # Test 1 hour
-        duration = format_duration(60)
-        self.assertEqual(duration, "1h 0m")
-        
-        # Test 1 hour and 30 minutes
-        duration = format_duration(90)
-        self.assertEqual(duration, "1h 30m")
-        
-        # Test just minutes
-        duration = format_duration(45)
-        self.assertEqual(duration, "0h 45m")
-        
-        # Test multiple hours
-        duration = format_duration(150)
-        self.assertEqual(duration, "2h 30m")
+from app import app, get_working_times, get_project_times
 
 class TestApiEndpoints(unittest.TestCase):
     """Test the API endpoints in app.py"""
     
     def setUp(self):
-        from app import app
-        self.app = app
         self.app_context = app.app_context()
+        self.app = app
         self.app_context.push()
         self.request_context = app.test_request_context()
         self.request_context.push()
@@ -111,7 +23,6 @@ class TestApiEndpoints(unittest.TestCase):
     @patch('app.session')
     def test_get_working_times_with_date(self, mock_session, mock_timr_api, mock_get_current_user):
         """Test that get_working_times filters by date correctly."""
-        from app import get_working_times
         
         # Configure the mock timr_api instance
         mock_timr_api.get_working_times.return_value = [
@@ -145,7 +56,6 @@ class TestApiEndpoints(unittest.TestCase):
             
             # Verify the response is a valid JSON response
             # Flask test client returns a Response object or a tuple (response, status_code)
-            import json
             
             if isinstance(result, tuple):
                 response, status_code = result
@@ -168,7 +78,6 @@ class TestApiEndpoints(unittest.TestCase):
     @patch('app.session')
     def test_get_working_times_with_invalid_date(self, mock_session, mock_timr_api, mock_get_current_user):
         """Test that get_working_times handles invalid dates properly."""
-        from app import get_working_times
         
         # Mock the request with invalid date
         with self.app.test_request_context('/api/working-times?date=invalid-date'):
@@ -186,7 +95,6 @@ class TestApiEndpoints(unittest.TestCase):
             
             # Verify that an error response was returned
             # Flask test client returns a Response object or a tuple (response, status_code)
-            import json
             
             if isinstance(result, tuple):
                 response, status_code = result
@@ -210,7 +118,6 @@ class TestApiEndpoints(unittest.TestCase):
     @patch('app.session')
     def test_get_project_times_response_structure(self, mock_session, mock_consolidator, mock_timr_api, mock_get_current_user):
         """Test that get_project_times returns the correct consolidated_project_times structure."""
-        from app import get_project_times
         
         # Create test data
         mock_working_time = {'id': 'wt1', 'start': '2025-05-01T09:00:00Z', 'end': '2025-05-01T17:00:00Z'}

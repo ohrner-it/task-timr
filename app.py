@@ -5,6 +5,7 @@ Main Flask application module
 Copyright (c) 2025 Ohrner IT GmbH
 Licensed under the MIT License
 """
+from utils import parse_iso_datetime
 
 import os
 import logging
@@ -12,7 +13,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from timr_api import TimrApi, TimrApiError
 from timr_utils import ProjectTimeConsolidator, UIProjectTime
-from config import COMPANY_ID, TIME_FORMAT, DATE_FORMAT, TASKLIST_TIMR_USER, TASKLIST_TIMR_PASSWORD, SESSION_SECRET
+from config import COMPANY_ID, TIME_FORMAT, DATE_FORMAT, TASKLIST_TIMR_USER, TASKLIST_TIMR_PASSWORD, SESSION_SECRET, MAX_RECENT_TASKS
 
 # Configure logging
 logging.basicConfig(
@@ -31,96 +32,9 @@ timr_api = TimrApi(company_id=COMPANY_ID)
 timr_api_elevated = TimrApi(company_id=COMPANY_ID)
 project_time_consolidator = ProjectTimeConsolidator(timr_api)
 
+
 # Recent tasks cache
 recent_tasks_cache = {}
-
-# Utility functions for date and time handling
-def parse_date(date_str):
-    """
-    Parse a date string into a datetime.date object.
-    
-    Args:
-        date_str (str): Date string in ISO format or YYYY-MM-DD
-        
-    Returns:
-        datetime.date: Parsed date or None if parsing failed
-    """
-    if not date_str:
-        return None
-        
-    formats = [DATE_FORMAT, "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ"]
-    
-    for fmt in formats:
-        try:
-            if fmt == DATE_FORMAT:
-                return datetime.strptime(date_str, fmt).date()
-            else:
-                # Replace Z with +00:00 for ISO format compatibility
-                if date_str.endswith('Z'):
-                    date_str = date_str[:-1] + '+00:00'
-                dt = datetime.strptime(date_str, fmt)
-                return dt.date()
-        except ValueError:
-            continue
-            
-    return None
-
-def parse_time(time_str):
-    """
-    Parse a time string into a datetime.time object.
-    
-    Args:
-        time_str (str): Time string in ISO format or HH:MM
-        
-    Returns:
-        datetime.time: Parsed time or None if parsing failed
-    """
-    if not time_str:
-        return None
-        
-    formats = [TIME_FORMAT, "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ"]
-    
-    for fmt in formats:
-        try:
-            if fmt == TIME_FORMAT:
-                return datetime.strptime(time_str, fmt).time()
-            else:
-                # Replace Z with +00:00 for ISO format compatibility
-                if time_str.endswith('Z'):
-                    time_str = time_str[:-1] + '+00:00'
-                dt = datetime.strptime(time_str, fmt)
-                return dt.time()
-        except ValueError:
-            continue
-            
-    return None
-
-def combine_datetime(date_obj, time_obj):
-    """
-    Combine date and time objects into a datetime object.
-    
-    Args:
-        date_obj (datetime.date): Date object
-        time_obj (datetime.time): Time object
-        
-    Returns:
-        datetime.datetime: Combined datetime object
-    """
-    return datetime.combine(date_obj, time_obj)
-
-def format_duration(minutes):
-    """
-    Format duration in minutes to hours and minutes.
-    
-    Args:
-        minutes (int): Duration in minutes
-        
-    Returns:
-        str: Formatted duration string (e.g., "2h 30m")
-    """
-    hours = minutes // 60
-    remaining_mins = minutes % 60
-    return f"{hours}h {remaining_mins}m"
 
 # Function for getting project times (for testing)
 def get_project_times():
@@ -330,13 +244,17 @@ def create_working_time():
             start_date=date_str, end_date=date_str, user_id=user.get('id'))
 
         # Check if new working time would overlap with existing ones
-        start_dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
-        end_dt = datetime.fromisoformat(end.replace('Z', '+00:00'))
+        start_dt = parse_iso_datetime(start)
+        end_dt = parse_iso_datetime(end)
+
+        if not start_dt or not end_dt:
+            return jsonify({'error': 'Invalid start or end datetime'}), 400
 
         for wt in existing_working_times:
-            wt_start = datetime.fromisoformat(wt['start'].replace(
-                'Z', '+00:00'))
-            wt_end = datetime.fromisoformat(wt['end'].replace('Z', '+00:00'))
+            wt_start = parse_iso_datetime(wt.get('start'))
+            wt_end = parse_iso_datetime(wt.get('end'))
+            if not wt_start or not wt_end:
+                continue
 
             # Check for overlap
             if (start_dt < wt_end and end_dt > wt_start):
@@ -392,14 +310,17 @@ def update_working_time(working_time_id):
             ]
 
             # Check for overlap
-            start_dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
-            end_dt = datetime.fromisoformat(end.replace('Z', '+00:00'))
+            start_dt = parse_iso_datetime(start)
+            end_dt = parse_iso_datetime(end)
+
+            if not start_dt or not end_dt:
+                return jsonify({'error': 'Invalid start or end datetime'}), 400
 
             for wt in existing_working_times:
-                wt_start = datetime.fromisoformat(wt['start'].replace(
-                    'Z', '+00:00'))
-                wt_end = datetime.fromisoformat(wt['end'].replace(
-                    'Z', '+00:00'))
+                wt_start = parse_iso_datetime(wt.get('start'))
+                wt_end = parse_iso_datetime(wt.get('end'))
+                if not wt_start or not wt_end:
+                    continue
 
                 # Check for overlap
                 if (start_dt < wt_end and end_dt > wt_start):
@@ -524,7 +445,6 @@ def get_recent_tasks():
         
         try:
             # Get recent project times from the last 30 days
-            from datetime import datetime, timedelta
             end_date = datetime.now()
             start_date = end_date - timedelta(days=30)
             
@@ -613,7 +533,6 @@ def update_recent_tasks(user_id, task):
     recent_tasks_cache[user_id].insert(0, task_copy)
 
     # Limit to configured number of recent tasks
-    from config import MAX_RECENT_TASKS
     recent_tasks_cache[user_id] = recent_tasks_cache[
         user_id][:MAX_RECENT_TASKS]
 
@@ -928,25 +847,24 @@ def replace_ui_project_times(working_time_id):
             pt.get('duration_minutes', 0) for pt in data['ui_project_times'])
 
         # Get available time
-        start_str = working_time.get("start", "").replace('Z', '+00:00')
-        end_str = working_time.get("end", "").replace('Z', '+00:00')
+        start_dt = parse_iso_datetime(working_time.get("start"))
+        end_dt = parse_iso_datetime(working_time.get("end"))
         break_duration = working_time.get("break_time_total_minutes", 0)
 
-        try:
-            work_start = datetime.fromisoformat(start_str)
-            work_end = datetime.fromisoformat(end_str)
-            available_minutes = int(
-                (work_end - work_start).total_seconds() / 60) - break_duration
+        if start_dt and end_dt:
+            try:
+                available_minutes = int(
+                    (end_dt - start_dt).total_seconds() / 60) - break_duration
 
-            # If total duration exceeds available time
-            if total_requested_duration > available_minutes:
-                return jsonify({
-                    'error':
-                    f'Total requested duration {total_requested_duration}m exceeds '
-                    f'available time {available_minutes}m in this working time'
-                }), 400
-        except (ValueError, TypeError) as e:
-            logger.error(f"Error calculating available time: {e}")
+                # If total duration exceeds available time
+                if total_requested_duration > available_minutes:
+                    return jsonify({
+                        'error':
+                        f'Total requested duration {total_requested_duration}m exceeds '
+                        f'available time {available_minutes}m in this working time'
+                    }), 400
+            except (ValueError, TypeError) as e:
+                logger.error(f"Error calculating available time: {e}")
 
         # Convert dictionary data to UIProjectTime objects
         ui_project_times = []

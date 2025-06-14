@@ -6,6 +6,7 @@ Copyright (c) 2025 Ohrner IT GmbH
 Licensed under the MIT License
 """
 
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Set, Tuple, Union
@@ -70,7 +71,6 @@ class UIProjectTime:
         Returns:
             str: JSON string representation of this UIProjectTime
         """
-        import json
         return json.dumps(self.to_dict())
 
     def to_dict(self) -> Dict[str, Any]:

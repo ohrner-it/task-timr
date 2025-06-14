@@ -472,7 +472,7 @@ class TestAppUtilityFunctions(unittest.TestCase):
 
     def test_parse_date_valid_formats(self):
         """Test parse_date with valid date formats"""
-        from app import parse_date
+        from utils import parse_date
         
         # Test ISO format
         result = parse_date('2025-04-01')
@@ -488,7 +488,7 @@ class TestAppUtilityFunctions(unittest.TestCase):
 
     def test_parse_date_invalid_formats(self):
         """Test parse_date with invalid date formats"""
-        from app import parse_date
+        from utils import parse_date
         
         # Test invalid format
         result = parse_date('invalid-date')
@@ -504,7 +504,7 @@ class TestAppUtilityFunctions(unittest.TestCase):
 
     def test_parse_time_valid_formats(self):
         """Test parse_time with valid time formats"""
-        from app import parse_time
+        from utils import parse_time
         
         # Test HH:MM format (the main format supported)
         result = parse_time('14:30')
@@ -520,7 +520,7 @@ class TestAppUtilityFunctions(unittest.TestCase):
 
     def test_parse_time_invalid_formats(self):
         """Test parse_time with invalid time formats"""
-        from app import parse_time
+        from utils import parse_time
         
         # Test invalid format
         result = parse_time('invalid-time')
@@ -536,7 +536,7 @@ class TestAppUtilityFunctions(unittest.TestCase):
 
     def test_combine_datetime(self):
         """Test combine_datetime function"""
-        from app import combine_datetime
+        from utils import combine_datetime
         import datetime
         
         date_obj = datetime.date(2025, 4, 1)
@@ -552,7 +552,7 @@ class TestAppUtilityFunctions(unittest.TestCase):
 
     def test_format_duration(self):
         """Test format_duration function"""
-        from app import format_duration
+        from utils import format_duration
         
         # Test basic formatting
         self.assertEqual(format_duration(90), "1h 30m")

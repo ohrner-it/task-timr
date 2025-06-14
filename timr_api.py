@@ -4,6 +4,7 @@ import datetime
 import pytz
 import logging
 from config import API_BASE_URL, COMPANY_ID
+from utils import parse_iso_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -728,10 +729,18 @@ class TimrApi:
         """
         try:
             # Parse the start and end times
-            work_start = datetime.datetime.fromisoformat(
-                work_time_entry["start"].replace("Z", "+00:00"))
-            work_end = datetime.datetime.fromisoformat(
-                work_time_entry["end"].replace("Z", "+00:00"))
+            work_start = parse_iso_datetime(work_time_entry.get("start"))
+            work_end = parse_iso_datetime(work_time_entry.get("end"))
+
+            if not work_start:
+                logger.error("Working time missing start time")
+                return []
+
+            if not work_end:
+                logger.warning(
+                    "Working time missing end time; assuming ongoing recording"
+                )
+                work_end = datetime.datetime.now(tz=work_start.tzinfo or datetime.timezone.utc)
 
             # Format dates for API query
             start_date = work_start.date()
@@ -747,10 +756,10 @@ class TimrApi:
             project_times_in_working_time = []
             for pt in project_times:
                 try:
-                    pt_start = datetime.datetime.fromisoformat(
-                        pt.get("start", "").replace("Z", "+00:00"))
-                    pt_end = datetime.datetime.fromisoformat(
-                        pt.get("end", "").replace("Z", "+00:00"))
+                    pt_start = parse_iso_datetime(pt.get("start"))
+                    pt_end = parse_iso_datetime(pt.get("end"))
+                    if not pt_start or not pt_end:
+                        continue
 
                     # Check if project time overlaps with working time
                     if ((pt_start >= work_start and pt_start < work_end)

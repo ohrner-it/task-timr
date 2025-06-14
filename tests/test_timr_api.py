@@ -1,6 +1,7 @@
 import unittest
 import datetime
 import pytz
+from unittest.mock import patch
 from timr_api import TimrApi
 
 
@@ -62,6 +63,22 @@ class TestTimrApi(unittest.TestCase):
         dt_str = "2025-05-01"
         formatted = self.api._format_date_for_query(dt_str)
         self.assertEqual(formatted, "2025-05-01")
+
+    def test_get_project_times_open_working_time(self):
+        """_get_project_times_in_work_time handles recording working times."""
+        working_time = {
+            "start": "2025-04-01T09:00:00Z",
+            "end": None,
+        }
+
+        sample_project_times = [
+            {"start": "2025-04-01T09:30:00Z", "end": "2025-04-01T10:00:00Z"}
+        ]
+
+        with patch.object(self.api, "get_project_times", return_value=sample_project_times) as mock_get:
+            result = self.api._get_project_times_in_work_time(working_time)
+            self.assertEqual(len(result), 1)
+            mock_get.assert_called_once()
 
 
 if __name__ == '__main__':
