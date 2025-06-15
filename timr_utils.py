@@ -639,8 +639,17 @@ class ProjectTimeConsolidator:
         if not work_times:
             return []
 
+        # Filter out invalid entries
+        valid_work_times = [
+            wt for wt in work_times
+            if isinstance(wt, dict) and wt.get("start")
+        ]
+
+        if not valid_work_times:
+            return []
+
         # Sort work times by start time
-        sorted_work_times = sorted(work_times,
+        sorted_work_times = sorted(valid_work_times,
                                    key=lambda wt: wt.get("start", ""))
 
         # Check for overlaps and adjust end times
@@ -828,9 +837,6 @@ class ProjectTimeConsolidator:
                 work_end = datetime.fromisoformat(end_str)
             else:
                 duration = (working_time.get("duration") or {}).get("minutes")
-                if duration is None:
-                    duration = (working_time.get("duration") or {}).get(
-                        "minutes_rounded")
                 if duration is None:
                     raise ValueError(
                         "Working time missing end time and duration")

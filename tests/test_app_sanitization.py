@@ -96,6 +96,20 @@ class TestSanitizationFunctions(unittest.TestCase):
         self.assertEqual(sanitized_wts[2]["end"],
                          self.overlapping_work_times[2]["end"])
 
+    def test_sanitize_work_times_skips_invalid_entries(self):
+        """sanitize_work_times ignores None or malformed items"""
+        work_times = [
+            None,
+            {"start": "2025-04-01T09:00:00+00:00", "end": "2025-04-01T10:00:00+00:00"},
+            123,
+            {"id": "wt2", "end": "2025-04-01T11:00:00+00:00"},
+        ]
+
+        result = self.consolidator.sanitize_work_times(work_times)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["start"], "2025-04-01T09:00:00+00:00")
+
     def test_sanitize_project_times(self):
         """Test sanitize_project_times method"""
         # Configure mock

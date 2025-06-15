@@ -341,8 +341,6 @@ def create_working_time():
                 wt_end = datetime.fromisoformat(wt_end_str.replace('Z', '+00:00'))
             else:
                 duration = (wt.get('duration') or {}).get('minutes')
-                if duration is None:
-                    duration = (wt.get('duration') or {}).get('minutes_rounded')
                 if duration is not None:
                     wt_end = wt_start + timedelta(minutes=duration)
                 else:
@@ -413,8 +411,6 @@ def update_working_time(working_time_id):
                     wt_end = datetime.fromisoformat(wt_end_str.replace('Z', '+00:00'))
                 else:
                     duration = (wt.get('duration') or {}).get('minutes')
-                    if duration is None:
-                        duration = (wt.get('duration') or {}).get('minutes_rounded')
                     if duration is not None:
                         wt_end = wt_start + timedelta(minutes=duration)
                     else:
@@ -958,8 +954,6 @@ def replace_ui_project_times(working_time_id):
                 work_end = datetime.fromisoformat(end_str)
             else:
                 duration = (working_time.get("duration") or {}).get("minutes")
-                if duration is None:
-                    duration = (working_time.get("duration") or {}).get("minutes_rounded")
                 if duration is None:
                     raise ValueError("Working time missing end time and duration")
                 work_end = work_start + timedelta(minutes=duration)
