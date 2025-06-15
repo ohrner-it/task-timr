@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from timr_api import TimrApi, TimrApiError
 from timr_utils import ProjectTimeConsolidator, UIProjectTime
+from working_time_utils import parse_working_time_range
 from config import COMPANY_ID, TIME_FORMAT, DATE_FORMAT, TASKLIST_TIMR_USER, TASKLIST_TIMR_PASSWORD, SESSION_SECRET
 
 # Configure logging
@@ -334,17 +335,10 @@ def create_working_time():
         end_dt = datetime.fromisoformat(end.replace('Z', '+00:00'))
 
         for wt in existing_working_times:
-            wt_start = datetime.fromisoformat(wt['start'].replace(
-                'Z', '+00:00'))
-            wt_end_str = wt.get('end')
-            if wt_end_str:
-                wt_end = datetime.fromisoformat(wt_end_str.replace('Z', '+00:00'))
-            else:
-                duration = (wt.get('duration') or {}).get('minutes')
-                if duration is not None:
-                    wt_end = wt_start + timedelta(minutes=duration)
-                else:
-                    wt_end = datetime.utcnow()
+            try:
+                wt_start, wt_end = parse_working_time_range(wt)
+            except ValueError:
+                continue
 
             # Check for overlap
             if (start_dt < wt_end and end_dt > wt_start):
@@ -404,17 +398,10 @@ def update_working_time(working_time_id):
             end_dt = datetime.fromisoformat(end.replace('Z', '+00:00'))
 
             for wt in existing_working_times:
-                wt_start = datetime.fromisoformat(wt['start'].replace(
-                    'Z', '+00:00'))
-                wt_end_str = wt.get('end')
-                if wt_end_str:
-                    wt_end = datetime.fromisoformat(wt_end_str.replace('Z', '+00:00'))
-                else:
-                    duration = (wt.get('duration') or {}).get('minutes')
-                    if duration is not None:
-                        wt_end = wt_start + timedelta(minutes=duration)
-                    else:
-                        wt_end = datetime.utcnow()
+                try:
+                    wt_start, wt_end = parse_working_time_range(wt)
+                except ValueError:
+                    continue
 
                 # Check for overlap
                 if (start_dt < wt_end and end_dt > wt_start):
@@ -943,20 +930,10 @@ def replace_ui_project_times(working_time_id):
             pt.get('duration_minutes', 0) for pt in data['ui_project_times'])
 
         # Get available time
-        start_str = working_time.get("start", "").replace('Z', '+00:00')
-        end_raw = working_time.get("end")
-        end_str = end_raw.replace('Z', '+00:00') if end_raw else None
         break_duration = working_time.get("break_time_total_minutes", 0)
 
         try:
-            work_start = datetime.fromisoformat(start_str)
-            if end_str:
-                work_end = datetime.fromisoformat(end_str)
-            else:
-                duration = (working_time.get("duration") or {}).get("minutes")
-                if duration is None:
-                    raise ValueError("Working time missing end time and duration")
-                work_end = work_start + timedelta(minutes=duration)
+            work_start, work_end = parse_working_time_range(working_time)
             available_minutes = int(
                 (work_end - work_start).total_seconds() / 60) - break_duration
 

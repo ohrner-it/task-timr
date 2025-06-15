@@ -4,6 +4,7 @@ import datetime
 import pytz
 import logging
 from config import API_BASE_URL, COMPANY_ID
+from working_time_utils import parse_working_time_range
 
 logger = logging.getLogger(__name__)
 
@@ -727,19 +728,7 @@ class TimrApi:
             list: Project times within the working time
         """
         try:
-            # Parse the start time
-            work_start_str = work_time_entry["start"].replace("Z", "+00:00")
-            work_start = datetime.datetime.fromisoformat(work_start_str)
-
-            end_str = work_time_entry.get("end")
-            if end_str:
-                work_end = datetime.datetime.fromisoformat(
-                    end_str.replace("Z", "+00:00"))
-            else:
-                duration = (work_time_entry.get("duration") or {}).get("minutes")
-                if duration is None:
-                    raise ValueError("Working time missing end time and duration")
-                work_end = work_start + datetime.timedelta(minutes=duration)
+            work_start, work_end = parse_working_time_range(work_time_entry)
 
             # Format dates for API query
             start_date = work_start.date()

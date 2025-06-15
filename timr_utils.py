@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Set, Tuple, Union
 
 from timr_api import TimrApi, TimrApiError
+from working_time_utils import parse_working_time_range
 
 logger = logging.getLogger(__name__)
 
@@ -819,28 +820,7 @@ class ProjectTimeConsolidator:
 
         # Get the start and end times of the working time
         try:
-            start_str = working_time.get("start", "")
-            end_str = working_time.get("end")
-
-            if not start_str:
-                raise ValueError("Working time must have a start time")
-
-            # Normalize timezone format
-            if start_str.endswith('Z'):
-                start_str = start_str.replace('Z', '+00:00')
-
-            work_start = datetime.fromisoformat(start_str)
-
-            if end_str:
-                if end_str.endswith('Z'):
-                    end_str = end_str.replace('Z', '+00:00')
-                work_end = datetime.fromisoformat(end_str)
-            else:
-                duration = (working_time.get("duration") or {}).get("minutes")
-                if duration is None:
-                    raise ValueError(
-                        "Working time missing end time and duration")
-                work_end = work_start + timedelta(minutes=duration)
+            work_start, work_end = parse_working_time_range(working_time)
 
             work_duration = int((work_end - work_start).total_seconds() / 60)
             logger.info(
