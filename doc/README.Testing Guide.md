@@ -73,7 +73,7 @@ Unit tests with mocks are useful for testing code in isolation, but they rely on
 
 ### Running Integration Tests
 
-**WARNING**: Integration tests make real changes to your Timr.com account! They create and delete working times and project times. Tests use future dates to minimize conflicts and clean up after themselves, but use with caution.
+**WARNING**: Integration tests make real changes to your Timr.com account! They create and delete working times and project times. The tests use yesterday's date to avoid conflicts and stay within API restrictions, but use with caution.
 
 1. Set environment variables for Timr.com credentials:
    ```bash
