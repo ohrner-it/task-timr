@@ -42,15 +42,16 @@ These guidelines apply to the entire repository.
   `<module_under_test>.test.js`.
 
 ## How to Deal With Unexpected Application or Code Behaviour
-1. First make sure you really understand the problem properly.
-2. Challenge and validate your assumptions. Is there really happening what you assume to happen? Incorrect assumptions about what is happening are a frequent reason for unexpected problems. Tests and logging can be used to confirm what's really happening.
-3. Assume external systems and services you need to interface with are working correctly according to the specification, unless you explicitly know otherwise. Do not create workaround code for hypothetical problems in other services which most likely don't exist.
-4. Always focus on identifying and resolving the root cause instead of adding “work-around code.” Such work-around code is nearly always the wrong approach and adds unnecessary complexity and maintenance issues.
+- First make sure you really understand the problem properly.
+- Challenge and validate your assumptions. Is there really happening what you assume to happen? Incorrect assumptions about what is happening are a frequent reason for unexpected problems. Tests and logging can be used to confirm what's really happening.
+- Assume external systems and services you need to interface with are working correctly according to the specification, unless you explicitly know otherwise. Do not create workaround code for hypothetical problems in other services which most likely don't exist.
+- Always focus on identifying and resolving the root cause instead of adding “work-around code.” Such work-around code is nearly always the wrong approach and adds unnecessary complexity and maintenance issues.
 
 ## Code Quality
 - Follow established best practices: separation of concerns, encapsulation,
-  extracting common functionality / modularization, and in generel write maintainable
-  code. Leave modified code in a better state than before.
+  extracting common functionality / modularization, and in general write maintainable
+  code. Avoid duplicating logic and use properly tested common methods and functions
+  instead. Leave modified code in a better state than it was before.
 - When changing interfaces, update all callers, tests and relevant documentation.
 - Remove or correct defective code instead of layering workarounds.
 - Focus on identifying the root cause of problems; validate assumptions using tests and logging.
