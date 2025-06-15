@@ -724,6 +724,24 @@ class TestProjectTimeConsolidatorEdgeCases(unittest.TestCase):
         self.assertEqual(result["net_duration"], 30)
         self.assertEqual(result["remaining_duration"], 30)
 
+    def test_consolidate_running_time_with_alt_duration_field(self):
+        """consolidate_project_times uses duration_minutes when present"""
+        working_time = {
+            "id": "wt-running2",
+            "start": "2025-06-14T20:00:00+00:00",
+            "end": None,
+            "duration": None,
+            "duration_minutes": 45,
+            "break_time_total_minutes": 0,
+        }
+
+        self.mock_timr_api._get_project_times_in_work_time.return_value = []
+
+        result = self.consolidator.consolidate_project_times(working_time)
+
+        self.assertEqual(result["net_duration"], 45)
+        self.assertEqual(result["remaining_duration"], 45)
+
 
 if __name__ == '__main__':
     unittest.main()

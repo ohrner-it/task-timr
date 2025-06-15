@@ -1728,6 +1728,9 @@ document.addEventListener("DOMContentLoaded", function () {
         if (workingTime.duration && typeof workingTime.duration.minutes === 'number') {
             return workingTime.duration.minutes;
         }
+        if (typeof workingTime.duration_minutes === 'number') {
+            return workingTime.duration_minutes;
+        }
         return 0;
     }
 

@@ -84,6 +84,35 @@ class TestTimrApi(unittest.TestCase):
         mock_get.assert_called_once()
         self.assertEqual(result, [sample_pt])
 
+    def test_get_project_times_in_work_time_with_numeric_duration_field(self):
+        """Handles duration provided as number"""
+        working_time = {
+            "start": "2025-06-14T22:00:00+00:00",
+            "end": None,
+            "duration": 15,
+        }
+
+        with patch.object(self.api, "get_project_times", return_value=[]) as mock_get:
+            result = self.api._get_project_times_in_work_time(working_time)
+
+        mock_get.assert_called_once()
+        self.assertEqual(result, [])
+
+    def test_get_project_times_in_work_time_with_duration_minutes(self):
+        """Handles duration_minutes fallback"""
+        working_time = {
+            "start": "2025-06-14T22:00:00+00:00",
+            "end": None,
+            "duration": None,
+            "duration_minutes": 20,
+        }
+
+        with patch.object(self.api, "get_project_times", return_value=[]) as mock_get:
+            result = self.api._get_project_times_in_work_time(working_time)
+
+        mock_get.assert_called_once()
+        self.assertEqual(result, [])
+
 
 if __name__ == '__main__':
     unittest.main()

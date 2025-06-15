@@ -827,9 +827,19 @@ class ProjectTimeConsolidator:
                     end_str = end_str.replace('Z', '+00:00')
                 work_end = datetime.fromisoformat(end_str)
             else:
-                duration = working_time.get("duration", {}).get("minutes")
+                duration_field = working_time.get("duration")
+                duration = None
+                if isinstance(duration_field, dict):
+                    duration = duration_field.get("minutes")
+                elif isinstance(duration_field, (int, float)):
+                    duration = duration_field
+
                 if duration is None:
-                    raise ValueError("Working time missing end time and duration")
+                    duration = working_time.get("duration_minutes")
+
+                if duration is None:
+                    raise ValueError(
+                        "Working time missing end time and duration")
                 work_end = work_start + timedelta(minutes=duration)
             work_duration = int((work_end - work_start).total_seconds() / 60)
             logger.info(

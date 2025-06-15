@@ -737,7 +737,15 @@ class TimrApi:
                 work_end_str = work_end_str.replace("Z", "+00:00")
                 work_end = datetime.datetime.fromisoformat(work_end_str)
             else:
-                duration = work_time_entry.get("duration", {}).get("minutes", 0)
+                duration_field = work_time_entry.get("duration")
+                duration = 0
+                if isinstance(duration_field, dict):
+                    duration = duration_field.get("minutes", 0)
+                elif isinstance(duration_field, (int, float)):
+                    duration = duration_field
+                elif "duration_minutes" in work_time_entry:
+                    duration = work_time_entry.get("duration_minutes", 0)
+
                 work_end = work_start + datetime.timedelta(minutes=duration)
 
             # Format dates for API query
