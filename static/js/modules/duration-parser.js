@@ -122,3 +122,14 @@ export function parseJiraDuration(durationString) {
     const totalMinutes = Math.round(hours * 60) + minutes;
     return isReasonableDuration(totalMinutes) ? totalMinutes : NaN;
 }
+
+// Export for CommonJS (Node.js/Jest)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        JIRA_PARSE_DELAY_MS,
+        MAX_REASONABLE_DURATION_HOURS,
+        MAX_REASONABLE_DURATION_MINUTES,
+        isReasonableDuration,
+        parseJiraDuration
+    };
+}

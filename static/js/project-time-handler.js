@@ -1326,6 +1326,9 @@ window.editTimeAllocation = editTimeAllocation;
 // Export functions for testing (works in both Node.js and browser environments)
 if (typeof module !== 'undefined' && module.exports) {
     // Node.js environment (for testing)
+    // Import the constants from duration-parser for Node.js environment
+    const { parseJiraDuration, isReasonableDuration, MAX_REASONABLE_DURATION_MINUTES } = require('./modules/duration-parser.js');
+    
     module.exports = {
         parseJiraDuration,
         isReasonableDuration,

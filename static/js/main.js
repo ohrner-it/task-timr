@@ -28,6 +28,154 @@ import { openTimeAllocationModal, openDistributeTimeModal, fetchUIProjectTimes, 
 let currentViewDate = null;
 let isEditingWorkingTime = false;
 
+/**
+ * Render a working time card
+ * @param {Object} workingTime - Working time object
+ * @param {Array} attendanceTypes - List of attendance types (optional, defaults to global state)
+ * @returns {string} HTML string for the working time card
+ */
+function renderWorkingTimeCard(workingTime, attendanceTypes = null) {
+    const startTime = new Date(workingTime.start);
+    const workingTimeId = workingTime.id;
+    
+    // Handle ongoing working times (null end time)
+    const isOngoing = workingTime.end === null;
+    const endTime = isOngoing ? null : new Date(workingTime.end);
+
+    // Calculate duration - for ongoing times, use API duration or calculate from start
+    let durationMinutes;
+    if (isOngoing) {
+        // For ongoing working times, use duration from API if available
+        const durationInfo = workingTime.duration || {};
+        if (durationInfo.minutes !== undefined) {
+            durationMinutes = durationInfo.minutes;
+        } else {
+            // Fallback: calculate from start time to now
+            const now = new Date();
+            durationMinutes = Math.floor((now - startTime) / 60000);
+        }
+    } else {
+        // Standard working time with end time
+        durationMinutes = calculateDurationInMinutes(
+            workingTime.start,
+            workingTime.end,
+        );
+    }
+    
+    let breakMinutes = workingTime.break_time_total_minutes || 0;
+
+    // Calculate net duration (working time minus break)
+    const netDurationMinutes = durationMinutes - breakMinutes;
+
+    // Check if this working time type is editable (attendance_time category)
+    const workingTimeType = workingTime.working_time_type || {};
+    const workingTimeTypeName = workingTimeType.name || 'Unknown Type';
+    
+    // Check if the working time type is in the attendance types list (editable types)
+    // Use provided attendanceTypes or try to access global state
+    const attendanceTypesList = attendanceTypes || (typeof state !== 'undefined' ? state.attendanceTypes : null);
+    const isTypeEditable = attendanceTypesList && attendanceTypesList.some(type => 
+        type.id === workingTimeType.id
+    );
+    
+    // Disable working time editing for ongoing times (but keep task allocation enabled)
+    const isWorkingTimeEditable = isTypeEditable && !isOngoing;
+
+    return `
+        <div class="card mb-3 working-time-item" data-id="${workingTimeId}" data-editable="${isTypeEditable}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="me-3 fw-bold">${formatTimeFromISOString(workingTime.start)} - ${isOngoing ? "ongoing" : formatTimeFromISOString(workingTime.end)}</span>
+                    ${isTypeEditable ? 
+                        `<span class="badge ${isOngoing ? 'bg-success' : 'bg-secondary'}">${formatDuration(netDurationMinutes)}${isOngoing ? ' (running)' : ''}</span>
+                        ${breakMinutes > 0 ? `<span class="badge bg-info ms-1">Break: ${formatDuration(breakMinutes)}</span>` : ""}` :
+                        `<span class="badge bg-warning">Read-only</span>`
+                    }
+                    <span class="badge bg-light text-dark ms-1" title="Working Time Type">${workingTimeTypeName}</span>
+                </div>
+                <div class="btn-group btn-group-sm" role="group" aria-label="Working time actions">
+                    ${isTypeEditable ? 
+                        `<button type="button" class="btn btn-outline-secondary toggle-details" title="Toggle details" aria-label="Toggle details">
+                            <i class="bi bi-chevron-down"></i>
+                        </button>
+                        ${isWorkingTimeEditable ? 
+                            `<button type="button" class="btn btn-outline-primary edit-working-time" title="Edit working time" aria-label="Edit working time">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-danger delete-working-time" title="Delete working time" aria-label="Delete working time">
+                                <i class="bi bi-trash"></i>
+                            </button>` :
+                            `<button type="button" class="btn btn-outline-secondary" disabled title="Ongoing working times cannot be edited">
+                                <i class="bi bi-lock"></i>
+                            </button>`
+                        }` :
+                        `<button type="button" class="btn btn-outline-secondary" disabled title="Read-only - non-attendance time types cannot be edited">
+                            <i class="bi bi-lock"></i>
+                        </button>`
+                    }
+                </div>
+            </div>
+            <div class="working-time-details d-none">
+                <div class="card-body">
+                    <div id="time-allocation-${workingTimeId}" class="time-allocation mb-3">
+                        <!-- Time allocation progress will be populated here -->
+                        <div class="text-center">
+                            <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <span class="ms-2">Loading time allocations...</span>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mb-3">
+                        <h5>Time Allocations</h5>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Time allocation actions">
+                            <button type="button" class="btn btn-primary add-time-allocation" title="Add time allocation (Alt+A)">
+                                <i data-feather="plus"></i> Add Time
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary distribute-time" title="Distribute remaining time (Alt+R)">
+                                <i data-feather="share-2"></i> Add Remaining Time
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="project-times-${workingTimeId}" class="project-times mb-3">
+                        <!-- UI Project times will be loaded here -->
+                        <div class="text-center my-3">
+                            <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                                <span class="visually-hidden">Loading project times...</span>
+                            </div>
+                            <span class="ms-2">Loading time allocations...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Calculate duration in minutes between two ISO date strings
+ * @param {string} startIsoString - Start time as ISO string
+ * @param {string} endIsoString - End time as ISO string
+ * @returns {number} Duration in minutes
+ */
+function calculateDurationInMinutes(startIsoString, endIsoString) {
+    const start = new Date(startIsoString);
+    const end = new Date(endIsoString);
+    return Math.floor((end - start) / 60000);
+}
+
+/**
+ * Format an ISO date string as HH:MM
+ * @param {string} isoString - ISO date string
+ * @returns {string} Formatted time string
+ */
+function formatTimeFromISOString(isoString) {
+    const date = new Date(isoString);
+    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 // Helper functions for expansion state storage - now using imported modules
 function getDateKeyWrapper() {
     return getDateKey(currentViewDate);
@@ -725,7 +873,7 @@ document.addEventListener("DOMContentLoaded", function () {
         // Render each working time
         let html = "";
         state.workingTimes.forEach((workingTime) => {
-            html += renderWorkingTimeCard(workingTime);
+            html += renderWorkingTimeCard(workingTime, state.attendanceTypes);
         });
 
         container.innerHTML = html;
@@ -798,100 +946,6 @@ document.addEventListener("DOMContentLoaded", function () {
             ?.addEventListener("click", openNewWorkingTimeModal);
     }
 
-    /**
-     * Render a working time card
-     */
-    function renderWorkingTimeCard(workingTime) {
-        const startTime = new Date(workingTime.start);
-        const endTime = new Date(workingTime.end);
-        const workingTimeId = workingTime.id;
-
-        // Calculate duration
-        const durationMinutes = calculateDurationInMinutes(
-            workingTime.start,
-            workingTime.end,
-        );
-        let breakMinutes = workingTime.break_time_total_minutes || 0;
-
-        // Calculate net duration (working time minus break)
-        const netDurationMinutes = durationMinutes - breakMinutes;
-
-        // Check if this working time type is editable (attendance_time category)
-        const workingTimeType = workingTime.working_time_type || {};
-        const workingTimeTypeName = workingTimeType.name || 'Unknown Type';
-        
-        // Check if the working time type is in the attendance types list (editable types)
-        const isEditable = state.attendanceTypes && state.attendanceTypes.some(type => 
-            type.id === workingTimeType.id
-        );
-
-        return `
-            <div class="card mb-3 working-time-item" data-id="${workingTimeId}" data-editable="${isEditable}">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <div>
-                        <span class="me-3 fw-bold">${formatTimeFromISOString(workingTime.start)} - ${formatTimeFromISOString(workingTime.end)}</span>
-                        ${isEditable ? 
-                            `<span class="badge bg-secondary">${formatDuration(netDurationMinutes)}</span>
-                            ${breakMinutes > 0 ? `<span class="badge bg-info ms-1">Break: ${formatDuration(breakMinutes)}</span>` : ""}` :
-                            `<span class="badge bg-warning">Read-only</span>`
-                        }
-                        <span class="badge bg-light text-dark ms-1" title="Working Time Type">${workingTimeTypeName}</span>
-                    </div>
-                    <div class="btn-group btn-group-sm" role="group" aria-label="Working time actions">
-                        ${isEditable ? 
-                            `<button type="button" class="btn btn-outline-secondary toggle-details" title="Toggle details" aria-label="Toggle details">
-                                <i class="bi bi-chevron-down"></i>
-                            </button>
-                            <button type="button" class="btn btn-outline-primary edit-working-time" title="Edit working time" aria-label="Edit working time">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button type="button" class="btn btn-outline-danger delete-working-time" title="Delete working time" aria-label="Delete working time">
-                                <i class="bi bi-trash"></i>
-                            </button>` :
-                            `<button type="button" class="btn btn-outline-secondary" disabled title="Read-only - non-attendance time types cannot be edited">
-                                <i class="bi bi-lock"></i>
-                            </button>`
-                        }
-                    </div>
-                </div>
-                <div class="working-time-details d-none">
-                    <div class="card-body">
-                        <div id="time-allocation-${workingTimeId}" class="time-allocation mb-3">
-                            <!-- Time allocation progress will be populated here -->
-                            <div class="text-center">
-                                <div class="spinner-border spinner-border-sm text-secondary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <span class="ms-2">Loading time allocations...</span>
-                            </div>
-                        </div>
-
-                        <div class="d-flex justify-content-between mb-3">
-                            <h5>Time Allocations</h5>
-                            <div class="btn-group btn-group-sm" role="group" aria-label="Time allocation actions">
-                                <button type="button" class="btn btn-primary add-time-allocation" title="Add time allocation (Alt+A)">
-                                    <i data-feather="plus"></i> Add Time
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary distribute-time" title="Distribute remaining time (Alt+R)">
-                                    <i data-feather="share-2"></i> Add Remaining Time
-                                </button>
-                            </div>
-                        </div>
-
-                        <div id="project-times-${workingTimeId}" class="project-times mb-3">
-                            <!-- UI Project times will be loaded here -->
-                            <div class="text-center my-3">
-                                <div class="spinner-border spinner-border-sm text-secondary" role="status">
-                                    <span class="visually-hidden">Loading project times...</span>
-                                </div>
-                                <span class="ms-2">Loading time allocations...</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
 
     /**
      * Setup event handlers for working time cards
@@ -1697,22 +1751,7 @@ document.addEventListener("DOMContentLoaded", function () {
         return formatDate(date);
     }
 
-    /**
-     * Format an ISO date string as HH:MM
-     */
-    function formatTimeFromISOString(isoString) {
-        const date = new Date(isoString);
-        return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-    }
 
-    /**
-     * Calculate duration in minutes between two ISO date strings
-     */
-    function calculateDurationInMinutes(startIsoString, endIsoString) {
-        const start = new Date(startIsoString);
-        const end = new Date(endIsoString);
-        return Math.floor((end - start) / 60000);
-    }
 
     // showAlert is now defined as a global function at the top of this file
 
@@ -1877,6 +1916,9 @@ if (typeof module !== 'undefined' && module.exports) {
         saveExpandedState,
         getExpandedStates,
         formatDuration,
-        parseTimeToMinutes
+        parseTimeToMinutes,
+        renderWorkingTimeCard,
+        calculateDurationInMinutes,
+        formatTimeFromISOString
     };
 }

@@ -110,6 +110,47 @@ class UIProjectTime:
         return ui_project_time
 
 
+def _calculate_ongoing_working_time_duration(working_time: Dict[str, Any], work_start: datetime) -> int:
+    """
+    Calculate duration for ongoing working times.
+    
+    Args:
+        working_time: Working time dictionary with duration info
+        work_start: Parsed start datetime of the working time
+        
+    Returns:
+        int: Duration in minutes
+    """
+    duration_info = working_time.get("duration", {})
+    if duration_info and "minutes" in duration_info:
+        return int(duration_info["minutes"])
+    else:
+        # Fallback: calculate duration from start time to now
+        import pytz
+        now = datetime.now(pytz.UTC)
+        return int((now - work_start).total_seconds() / 60)
+
+
+def _calculate_ongoing_working_time_end(working_time: Dict[str, Any], work_start: datetime) -> datetime:
+    """
+    Calculate effective end time for ongoing working times.
+    
+    Args:
+        working_time: Working time dictionary with duration info
+        work_start: Parsed start datetime of the working time
+        
+    Returns:
+        datetime: Calculated end time
+    """
+    duration_info = working_time.get("duration", {})
+    if duration_info and "minutes" in duration_info:
+        return work_start + timedelta(minutes=duration_info["minutes"])
+    else:
+        # Fallback: use current time as the working end
+        import pytz
+        return datetime.now(pytz.UTC)
+
+
 class ProjectTimeConsolidator:
     """
     Utility class for consolidating project times related to working times.
@@ -528,14 +569,22 @@ class ProjectTimeConsolidator:
         """
         # Parse working time boundaries
         start_str = working_time.get("start", "")
-        end_str = working_time.get("end", "")
+        end_str = working_time.get("end")  # Can be None for ongoing working times
+        
         if start_str.endswith('Z'):
             start_str = start_str.replace('Z', '+00:00')
-        if end_str.endswith('Z'):
-            end_str = end_str.replace('Z', '+00:00')
-
+        
         work_start = datetime.fromisoformat(start_str)
-        work_end = datetime.fromisoformat(end_str)
+        
+        # Handle ongoing working times (null end time)
+        if end_str is None:
+            work_end = _calculate_ongoing_working_time_end(working_time, work_start)
+            logger.info(f"Ongoing working time: calculated end time {work_end} for time slot distribution")
+        else:
+            # Standard working time with fixed end time
+            if end_str.endswith('Z'):
+                end_str = end_str.replace('Z', '+00:00')
+            work_end = datetime.fromisoformat(end_str)
         
         current_time = work_start
         time_slots = []
@@ -545,12 +594,21 @@ class ProjectTimeConsolidator:
             [t for t in tasks if not t.deleted and t.duration_minutes > 0],
             key=lambda x: (x.task_name or "", x.task_id), reverse=True)
 
+        # Determine if this is an ongoing working time
+        is_ongoing = working_time.get("end") is None
+        
         # Create sequential time slots with working time boundary enforcement
         for task in sorted_tasks:
-            # Enforce that task starts no later than working time end minus one minute
-            # (project times starting exactly at end time don't belong to working time)
-            max_start_time = work_end - timedelta(minutes=1)
-            task_start = min(current_time, max_start_time)
+            if is_ongoing:
+                # For ongoing working times, allow tasks to extend beyond current calculated end
+                # Don't enforce max start time restriction
+                task_start = current_time
+            else:
+                # For completed working times, enforce boundary restrictions
+                # Enforce that task starts no later than working time end minus one minute
+                # (project times starting exactly at end time don't belong to working time)
+                max_start_time = work_end - timedelta(minutes=1)
+                task_start = min(current_time, max_start_time)
             
             # Task duration is preserved (as per requirements), even if it causes overlap
             task_end = task_start + timedelta(minutes=task.duration_minutes)
@@ -811,23 +869,35 @@ class ProjectTimeConsolidator:
         # Get the start and end times of the working time
         try:
             start_str = working_time.get("start", "")
-            end_str = working_time.get("end", "")
+            end_str = working_time.get("end")  # Note: end can be None for ongoing times
 
-            if not start_str or not end_str:
-                raise ValueError("Working time must have start and end times")
+            if not start_str:
+                logger.warning("Working time missing start time")
+                raise ValueError("Working time must have a start time")
 
             # Handle different timezone formats in the API response
             if start_str.endswith('Z'):
                 start_str = start_str.replace('Z', '+00:00')
-            if end_str.endswith('Z'):
-                end_str = end_str.replace('Z', '+00:00')
-
+            
             work_start = datetime.fromisoformat(start_str)
-            work_end = datetime.fromisoformat(end_str)
-            work_duration = int((work_end - work_start).total_seconds() / 60)
-            logger.info(
-                f"CONSOLIDATE: Working time duration: {work_duration} minutes")
+            
+            # Handle ongoing working times (null end time)
+            if end_str is None:
+                logger.info("CONSOLIDATE: Processing ongoing working time")
+                work_duration = _calculate_ongoing_working_time_duration(working_time, work_start)
+                logger.info(
+                    f"CONSOLIDATE: Calculated ongoing duration: {work_duration} minutes")
+            else:
+                # Standard working time with end time
+                if end_str.endswith('Z'):
+                    end_str = end_str.replace('Z', '+00:00')
+                work_end = datetime.fromisoformat(end_str)
+                work_duration = int((work_end - work_start).total_seconds() / 60)
+                logger.info(
+                    f"CONSOLIDATE: Working time duration: {work_duration} minutes")
+                    
         except (ValueError, TypeError) as e:
+            logger.error(f"Error processing working time dates: {e}")
             raise ValueError(f"Invalid date format in working time entry: {e}")
 
         # Get break duration
