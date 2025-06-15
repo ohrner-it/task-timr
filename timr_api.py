@@ -738,6 +738,8 @@ class TimrApi:
             else:
                 duration = (work_time_entry.get("duration") or {}).get("minutes")
                 if duration is None:
+                    duration = work_time_entry.get("duration_minutes")
+                if duration is None:
                     raise ValueError("Working time missing end")
                 work_end = work_start + datetime.timedelta(minutes=duration)
 
