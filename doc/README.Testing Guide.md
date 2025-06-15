@@ -77,7 +77,7 @@ Unit tests with mocks are useful for testing code in isolation, but they rely on
 
 1. Set environment variables for Timr.com credentials:
    ```bash
-   export TIMR_USERNAME=your_username
+   export TIMR_USER=your_username
    export TIMR_PASSWORD=your_password
    ```
 
