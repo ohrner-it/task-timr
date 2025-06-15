@@ -333,5 +333,20 @@ describe('Working JavaScript Functions Coverage', () => {
                 expect(formatTimeFromISOString(undefined)).toBe('...');
             }
         });
+
+        test('renderWorkingTimeCard uses minutes_rounded', () => {
+            if (typeof renderWorkingTimeCard === 'function') {
+                const wt = {
+                    id: 'wt1',
+                    start: '2025-06-14T10:00:00Z',
+                    end: null,
+                    duration: { minutes_rounded: 25 },
+                    break_time_total_minutes: 0,
+                    working_time_type: {}
+                };
+                const html = renderWorkingTimeCard(wt);
+                expect(html).toContain('25m');
+            }
+        });
     });
 });

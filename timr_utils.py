@@ -829,6 +829,9 @@ class ProjectTimeConsolidator:
             else:
                 duration = (working_time.get("duration") or {}).get("minutes")
                 if duration is None:
+                    duration = (working_time.get("duration") or {}).get(
+                        "minutes_rounded")
+                if duration is None:
                     duration = working_time.get("duration_minutes")
                 if duration is None:
                     raise ValueError(
