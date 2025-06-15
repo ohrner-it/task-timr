@@ -327,27 +327,10 @@ describe('Working JavaScript Functions Coverage', () => {
             }
         });
 
-        test('getWorkingTimeDuration helper handles various fields', () => {
-            if (typeof getWorkingTimeDuration === 'function') {
-                const wt1 = {
-                    start: '2025-06-14T10:00:00+00:00',
-                    end: '2025-06-14T11:30:00+00:00'
-                };
-                expect(getWorkingTimeDuration(wt1)).toBe(90);
-
-                const wt2 = {
-                    start: '2025-06-14T10:00:00+00:00',
-                    end: null,
-                    duration: { minutes: 40 }
-                };
-                expect(getWorkingTimeDuration(wt2)).toBe(40);
-
-                const wt3 = {
-                    start: '2025-06-14T10:00:00+00:00',
-                    end: null,
-                    duration_minutes: 25
-                };
-                expect(getWorkingTimeDuration(wt3)).toBe(25);
+        test('formatTimeFromISOString handles missing values', () => {
+            if (typeof formatTimeFromISOString === 'function') {
+                expect(formatTimeFromISOString(null)).toBe('...');
+                expect(formatTimeFromISOString(undefined)).toBe('...');
             }
         });
     });

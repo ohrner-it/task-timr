@@ -802,10 +802,17 @@ document.addEventListener("DOMContentLoaded", function () {
      * Render a working time card
      */
     function renderWorkingTimeCard(workingTime) {
+        const startTime = new Date(workingTime.start);
+        const endTime = workingTime.end ? new Date(workingTime.end) : null;
         const workingTimeId = workingTime.id;
 
-        // Calculate duration, using ongoing duration when end is missing
-        const durationMinutes = getWorkingTimeDuration(workingTime);
+        // Calculate duration
+        const durationMinutes = workingTime.end
+            ? calculateDurationInMinutes(
+                workingTime.start,
+                workingTime.end,
+            )
+            : (workingTime.duration && workingTime.duration.minutes) || 0;
         let breakMinutes = workingTime.break_time_total_minutes || 0;
 
         // Calculate net duration (working time minus break)
@@ -1715,23 +1722,6 @@ document.addEventListener("DOMContentLoaded", function () {
         const start = new Date(startIsoString);
         const end = new Date(endIsoString);
         return Math.floor((end - start) / 60000);
-    }
-
-    /**
-     * Determine duration of a working time entry
-     * Fallback to the duration field when no end is present
-     */
-    function getWorkingTimeDuration(workingTime) {
-        if (workingTime.end) {
-            return calculateDurationInMinutes(workingTime.start, workingTime.end);
-        }
-        if (workingTime.duration && typeof workingTime.duration.minutes === 'number') {
-            return workingTime.duration.minutes;
-        }
-        if (typeof workingTime.duration_minutes === 'number') {
-            return workingTime.duration_minutes;
-        }
-        return 0;
     }
 
     // showAlert is now defined as a global function at the top of this file
