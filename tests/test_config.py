@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Define test credentials - these can be overridden by environment variables
-TEST_USERNAME = os.environ.get("TIMR_USERNAME", "test_user")
+TEST_USERNAME = os.environ.get("TIMR_USER", "test_user")
 TEST_PASSWORD = os.environ.get("TIMR_PASSWORD", "test_password")
 
 # Define test database (use in-memory SQLite for unit tests)
