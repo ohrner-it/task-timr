@@ -11,8 +11,7 @@ import logging
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from timr_api import TimrApi, TimrApiError
-from timr_utils import ProjectTimeConsolidator, UIProjectTime
-from working_time_utils import parse_working_time_range
+from timr_utils import ProjectTimeConsolidator, UIProjectTime, parse_working_time_range
 from config import COMPANY_ID, TIME_FORMAT, DATE_FORMAT, TASKLIST_TIMR_USER, TASKLIST_TIMR_PASSWORD, SESSION_SECRET
 
 # Configure logging

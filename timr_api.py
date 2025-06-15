@@ -4,7 +4,7 @@ import datetime
 import pytz
 import logging
 from config import API_BASE_URL, COMPANY_ID
-from working_time_utils import parse_working_time_range
+from timr_utils import parse_working_time_range
 
 logger = logging.getLogger(__name__)
 

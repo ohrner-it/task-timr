@@ -6,12 +6,46 @@ Copyright (c) 2025 Ohrner IT GmbH
 Licensed under the MIT License
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Set, Tuple, Union
 
-from timr_api import TimrApi, TimrApiError
-from working_time_utils import parse_working_time_range
+
+def parse_working_time_range(working_time: Dict[str, Any]) -> Tuple[datetime, datetime]:
+    """Return start and end datetimes for a working time entry.
+
+    Args:
+        working_time: Dict representing the working time.
+
+    Returns:
+        Tuple of (start, end) datetimes.
+
+    Raises:
+        ValueError: If start is missing or neither end nor duration are provided.
+    """
+    start_str = working_time.get("start")
+    if not start_str:
+        raise ValueError("Working time missing start time")
+    start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+
+    end_str = working_time.get("end")
+    if end_str:
+        end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+    else:
+        duration = (working_time.get("duration") or {}).get("minutes")
+        if duration is None:
+            raise ValueError("Working time missing end time and duration")
+        end_dt = start_dt + timedelta(minutes=duration)
+
+    return start_dt, end_dt
+
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - used for type hints only
+    from timr_api import TimrApi, TimrApiError
 
 logger = logging.getLogger(__name__)
 
@@ -745,6 +779,9 @@ class ProjectTimeConsolidator:
         # Get project times for this working time
         project_times = self.timr_api._get_project_times_in_work_time(
             working_time)
+
+        # Import here to avoid circular dependency at module load time
+        from timr_api import TimrApiError
 
         # Check each project time and adjust if needed
         adjusted_project_times = []
