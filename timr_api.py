@@ -4,8 +4,28 @@ import datetime
 import pytz
 import logging
 from config import API_BASE_URL, COMPANY_ID
+from datetime import timedelta
 
 logger = logging.getLogger(__name__)
+
+
+def _calculate_ongoing_working_time_end_for_api(working_time, work_start):
+    """
+    Calculate effective end time for ongoing working times (for API use).
+    
+    Args:
+        working_time: Working time dictionary with duration info
+        work_start: Parsed start datetime of the working time
+        
+    Returns:
+        datetime: Calculated end time
+    """
+    duration_info = working_time.get("duration", {})
+    if duration_info and "minutes" in duration_info:
+        return work_start + timedelta(minutes=duration_info["minutes"])
+    else:
+        # Fallback: use current time as the working end
+        return datetime.datetime.now(pytz.UTC)
 
 
 class TimrApiError(Exception):
@@ -727,11 +747,20 @@ class TimrApi:
             list: Project times within the working time
         """
         try:
-            # Parse the start and end times
+            # Parse the start time
             work_start = datetime.datetime.fromisoformat(
                 work_time_entry["start"].replace("Z", "+00:00"))
-            work_end = datetime.datetime.fromisoformat(
-                work_time_entry["end"].replace("Z", "+00:00"))
+            
+            # Handle ongoing working times (null end time)
+            work_end_str = work_time_entry.get("end")
+            if work_end_str is None:
+                # For ongoing working times, use calculated end time
+                work_end = _calculate_ongoing_working_time_end_for_api(work_time_entry, work_start)
+                logger.info(f"Using calculated end time for ongoing working time: {work_end}")
+            else:
+                # Standard working time with end time
+                work_end = datetime.datetime.fromisoformat(
+                    work_end_str.replace("Z", "+00:00"))
 
             # Format dates for API query
             start_date = work_start.date()

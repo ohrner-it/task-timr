@@ -336,14 +336,23 @@ def create_working_time():
         for wt in existing_working_times:
             wt_start = datetime.fromisoformat(wt['start'].replace(
                 'Z', '+00:00'))
-            wt_end = datetime.fromisoformat(wt['end'].replace('Z', '+00:00'))
-
-            # Check for overlap
-            if (start_dt < wt_end and end_dt > wt_start):
-                return jsonify({
-                    'error':
-                    'New working time would overlap with an existing working time'
-                }), 400
+            
+            # Handle ongoing working times (null end time)
+            if wt['end'] is None:
+                # Ongoing working time - check if new working time starts before ongoing starts
+                if start_dt < wt_start:
+                    return jsonify({
+                        'error':
+                        'New working time would overlap with an ongoing working time'
+                    }), 400
+            else:
+                wt_end = datetime.fromisoformat(wt['end'].replace('Z', '+00:00'))
+                # Check for overlap with completed working time
+                if (start_dt < wt_end and end_dt > wt_start):
+                    return jsonify({
+                        'error':
+                        'New working time would overlap with an existing working time'
+                    }), 400
 
         # Create working time - pass datetime objects directly, API client will format them
         working_time = timr_api.create_working_time(
@@ -378,6 +387,15 @@ def update_working_time(working_time_id):
     timr_api.user = user
 
     try:
+        # Get the current working time to check if it's ongoing
+        current_working_time = timr_api.get_working_time(working_time_id)
+        
+        if not current_working_time:
+            return jsonify({'error': 'Working time not found'}), 404
+        
+        # Check if this is an ongoing working time (null end time)
+        if current_working_time.get('end') is None:
+            return jsonify({'error': 'Cannot edit ongoing working times. Please stop the time recording first.'}), 400
 
         # Check for overlap with other working times (excluding this one)
         if start and end:
@@ -451,6 +469,16 @@ def delete_working_time(working_time_id):
     timr_api.user = user
 
     try:
+        # Get the current working time to check if it's ongoing
+        current_working_time = timr_api.get_working_time(working_time_id)
+        
+        if not current_working_time:
+            return jsonify({'error': 'Working time not found'}), 404
+        
+        # Check if this is an ongoing working time (null end time)
+        if current_working_time.get('end') is None:
+            return jsonify({'error': 'Cannot delete ongoing working times. Please stop the time recording first.'}), 400
+        
         # Delete working time
         timr_api.delete_working_time(working_time_id)
 

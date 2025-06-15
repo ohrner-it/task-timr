@@ -135,3 +135,29 @@ The `ProjectTimeConsolidator` class performs complex operations:
 ### Health Monitoring
 - Health check endpoint at `/health`
 - Deployment verification via `./verify-deployment.sh`
+
+## Ongoing Working Time Support
+
+Task Timr supports Timr.com's ongoing/recording working times (working times with null end times).
+
+### Key Features:
+- **Backend**: Null end time handling in consolidation and time slot calculation
+- **Frontend**: Clear visual indicators for ongoing times ("22:51 - ongoing 75m (running)")
+- **Project Time Allocation**: Can allocate time to tasks within ongoing working times
+- **Duration Calculation**: Uses real-time API duration with fallback to calculated time
+- **Edit Protection**: Ongoing working times cannot be edited or deleted (task allocation remains available)
+
+### Implementation Details:
+- **Consolidation Logic**: `_calculate_ongoing_working_time_duration()` and `_calculate_ongoing_working_time_end()` utility functions
+- **Time Slot Calculation**: Ongoing times allow task extension beyond current calculated end
+- **Frontend Rendering**: Green badges and "(running)" indicators for active working times
+- **Error Handling**: Graceful fallback when duration info is missing
+- **Edit Protection**: Backend API endpoints (PATCH/DELETE) block editing ongoing times; frontend hides edit/delete buttons
+- **Project Time Retrieval**: Fixed `_get_project_times_in_work_time` to handle null end times properly
+
+### Testing:
+- Comprehensive test coverage in `tests/test_ongoing_working_times.py`
+- Project time retrieval tests in `tests/test_ongoing_project_time_retrieval.py`
+- Edit protection tests in `tests/test_ongoing_working_time_protection.py`
+- Frontend tests in `tests/frontend/ongoing-working-times.test.js`
+- Tests cover consolidation, time slots, edge cases, UI rendering, and edit protection
