@@ -334,13 +334,13 @@ describe('Working JavaScript Functions Coverage', () => {
             }
         });
 
-        test('renderWorkingTimeCard uses minutes_rounded', () => {
+        test('renderWorkingTimeCard shows running duration', () => {
             if (typeof renderWorkingTimeCard === 'function') {
                 const wt = {
                     id: 'wt1',
                     start: '2025-06-14T10:00:00Z',
                     end: null,
-                    duration: { minutes_rounded: 25 },
+                    duration: { minutes: 25 },
                     break_time_total_minutes: 0,
                     working_time_type: {}
                 };

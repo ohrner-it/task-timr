@@ -336,7 +336,17 @@ def create_working_time():
         for wt in existing_working_times:
             wt_start = datetime.fromisoformat(wt['start'].replace(
                 'Z', '+00:00'))
-            wt_end = datetime.fromisoformat(wt['end'].replace('Z', '+00:00'))
+            wt_end_str = wt.get('end')
+            if wt_end_str:
+                wt_end = datetime.fromisoformat(wt_end_str.replace('Z', '+00:00'))
+            else:
+                duration = (wt.get('duration') or {}).get('minutes')
+                if duration is None:
+                    duration = (wt.get('duration') or {}).get('minutes_rounded')
+                if duration is not None:
+                    wt_end = wt_start + timedelta(minutes=duration)
+                else:
+                    wt_end = datetime.utcnow()
 
             # Check for overlap
             if (start_dt < wt_end and end_dt > wt_start):
@@ -398,8 +408,17 @@ def update_working_time(working_time_id):
             for wt in existing_working_times:
                 wt_start = datetime.fromisoformat(wt['start'].replace(
                     'Z', '+00:00'))
-                wt_end = datetime.fromisoformat(wt['end'].replace(
-                    'Z', '+00:00'))
+                wt_end_str = wt.get('end')
+                if wt_end_str:
+                    wt_end = datetime.fromisoformat(wt_end_str.replace('Z', '+00:00'))
+                else:
+                    duration = (wt.get('duration') or {}).get('minutes')
+                    if duration is None:
+                        duration = (wt.get('duration') or {}).get('minutes_rounded')
+                    if duration is not None:
+                        wt_end = wt_start + timedelta(minutes=duration)
+                    else:
+                        wt_end = datetime.utcnow()
 
                 # Check for overlap
                 if (start_dt < wt_end and end_dt > wt_start):
@@ -929,12 +948,21 @@ def replace_ui_project_times(working_time_id):
 
         # Get available time
         start_str = working_time.get("start", "").replace('Z', '+00:00')
-        end_str = working_time.get("end", "").replace('Z', '+00:00')
+        end_raw = working_time.get("end")
+        end_str = end_raw.replace('Z', '+00:00') if end_raw else None
         break_duration = working_time.get("break_time_total_minutes", 0)
 
         try:
             work_start = datetime.fromisoformat(start_str)
-            work_end = datetime.fromisoformat(end_str)
+            if end_str:
+                work_end = datetime.fromisoformat(end_str)
+            else:
+                duration = (working_time.get("duration") or {}).get("minutes")
+                if duration is None:
+                    duration = (working_time.get("duration") or {}).get("minutes_rounded")
+                if duration is None:
+                    raise ValueError("Working time missing end time and duration")
+                work_end = work_start + timedelta(minutes=duration)
             available_minutes = int(
                 (work_end - work_start).total_seconds() / 60) - break_duration
 

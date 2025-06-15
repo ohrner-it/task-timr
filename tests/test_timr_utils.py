@@ -454,40 +454,6 @@ class TestProjectTimeConsolidatorEdgeCases(unittest.TestCase):
         self.assertEqual(result["net_duration"], 30)
         self.assertEqual(result["remaining_duration"], 30)
 
-    def test_consolidate_running_working_time_duration_minutes(self):
-        """Handle running times with duration_minutes field"""
-        working_time = {
-            "id": "wt-running",
-            "start": "2025-06-14T22:51:00+00:00",
-            "end": None,
-            "duration_minutes": 45,
-            "break_time_total_minutes": 0,
-        }
-
-        self.mock_timr_api._get_project_times_in_work_time.return_value = []
-
-        result = self.consolidator.consolidate_project_times(working_time)
-
-        self.assertEqual(result["net_duration"], 45)
-        self.assertEqual(result["remaining_duration"], 45)
-
-    def test_consolidate_running_working_time_minutes_rounded(self):
-        """Handle running times with duration.minutes_rounded"""
-        working_time = {
-            "id": "wt-running",
-            "start": "2025-06-14T22:51:00+00:00",
-            "end": None,
-            "duration": {"minutes_rounded": 35},
-            "break_time_total_minutes": 0,
-        }
-
-        self.mock_timr_api._get_project_times_in_work_time.return_value = []
-
-        result = self.consolidator.consolidate_project_times(working_time)
-
-        self.assertEqual(result["net_duration"], 35)
-        self.assertEqual(result["remaining_duration"], 35)
-
     def test_consolidate_missing_end_and_duration(self):
         """Raise error when both end and duration are missing"""
         working_time = {

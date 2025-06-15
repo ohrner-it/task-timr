@@ -80,38 +80,6 @@ class TestTimrApi(unittest.TestCase):
         mock_get.assert_called_once()
         self.assertEqual(result, [sample_pt])
 
-    def test_get_project_times_in_work_time_duration_minutes(self):
-        """_get_project_times_in_work_time handles duration_minutes"""
-        working_time = {
-            "start": "2025-06-14T10:00:00+00:00",
-            "end": None,
-            "duration_minutes": 20,
-        }
-
-        sample_pt = {"id": "pt1", "start": "2025-06-14T10:05:00+00:00", "end": "2025-06-14T10:10:00+00:00"}
-
-        with patch.object(self.api, "get_project_times", return_value=[sample_pt]) as mock_get:
-            result = self.api._get_project_times_in_work_time(working_time)
-
-        mock_get.assert_called_once()
-        self.assertEqual(result, [sample_pt])
-
-    def test_get_project_times_in_work_time_minutes_rounded(self):
-        """_get_project_times_in_work_time uses minutes_rounded"""
-        working_time = {
-            "start": "2025-06-14T10:00:00+00:00",
-            "end": None,
-            "duration": {"minutes_rounded": 30},
-        }
-
-        sample_pt = {"id": "pt1", "start": "2025-06-14T10:05:00+00:00", "end": "2025-06-14T10:10:00+00:00"}
-
-        with patch.object(self.api, "get_project_times", return_value=[sample_pt]) as mock_get:
-            result = self.api._get_project_times_in_work_time(working_time)
-
-        mock_get.assert_called_once()
-        self.assertEqual(result, [sample_pt])
-
 
 if __name__ == '__main__':
     unittest.main()

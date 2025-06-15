@@ -812,9 +812,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 workingTime.start,
                 workingTime.end,
             )
-            : (workingTime.duration && (workingTime.duration.minutes ||
-                workingTime.duration.minutes_rounded)) ||
-                workingTime.duration_minutes || 0;
+            : (workingTime.duration && workingTime.duration.minutes) || 0;
         let breakMinutes = workingTime.break_time_total_minutes || 0;
 
         // Calculate net duration (working time minus break)
