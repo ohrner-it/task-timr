@@ -641,10 +641,17 @@ class ProjectTimeConsolidator:
             return []
 
         # Filter out invalid entries
-        valid_work_times = [
-            wt for wt in work_times
-            if isinstance(wt, dict) and wt.get("start")
-        ]
+        valid_work_times = []
+        for wt in work_times:
+            if not isinstance(wt, dict) or not wt.get("start"):
+                continue
+            try:
+                # Ensure we can derive a time range
+                parse_working_time_range(wt)
+            except ValueError:
+                logger.warning("Skipping malformed working time entry")
+                continue
+            valid_work_times.append(wt)
 
         if not valid_work_times:
             return []

@@ -103,6 +103,7 @@ class TestSanitizationFunctions(unittest.TestCase):
             {"start": "2025-04-01T09:00:00+00:00", "end": "2025-04-01T10:00:00+00:00"},
             123,
             {"id": "wt2", "end": "2025-04-01T11:00:00+00:00"},
+            {"start": "2025-04-01T12:00:00+00:00"},
         ]
 
         result = self.consolidator.sanitize_work_times(work_times)
