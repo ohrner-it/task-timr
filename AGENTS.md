@@ -74,6 +74,10 @@ These guidelines apply to the entire repository.
     After you consider the issues resolved, make sure all tests really pass, and
     then critically review again. Repeat until the review does not find any
     violations of the project's coding and testing guidelines and rules any more.
+- Refrain from creating new documentation files which in detail describe the
+  changes performed for the current task. Such documentation files serve no
+  long-term purpose, clutter the documentation folder and get obsolete nearly
+  immediately. See the instructions on how to update the documentation below.
 
 ## Commit and PR Guidelines
 - Use concise commit messages: a single short summary line, followed by an empty
@@ -194,15 +198,16 @@ These guidelines apply to the entire repository.
 - Never log sensitive values like passwords or access tokens, mask them in log messages.
 
 ### Documentation
-- The documentation should focus on "what is", not historical views about "what
-  once was".
-- Important key points need to be documented, but not every implementation detail.
-  Adding too much details to the documentation guarantees that the documentation
-  will be outdaten and inconsistent very soon, because you or someone else forgets
+- The documentation should focus on the current state of the application - neither on
+  a former state which no longer exists, nor on the current task which only matters at
+  this moment, but not in the longer term.
+- Important key points or new concepts need to be documented, but not every
+  implementation detail. Documenting too many details soon will very soon lead to an
+  outdated and inconsistent documentation, because you or someone else will forget
   to update it.
-- Nevertheless strive to keep the documentation up-to-date and relevant. Everytime
-  you change something in the application, check if the documentation needs to be
-  extended or updated.
+- Strive to keep the documentation up-to-date and relevant. Everytime you change
+  something in the application, check if the documentation needs to be extended or
+  updated.
 
 ## Important Implementation Details
 
