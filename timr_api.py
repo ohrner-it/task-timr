@@ -5,6 +5,7 @@ import pytz
 import logging
 from config import API_BASE_URL, COMPANY_ID
 from datetime import timedelta
+from error_handler import timr_api_error_handler, ErrorCategory, ErrorSeverity, ErrorContext
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,16 @@ class TimrApiError(Exception):
         self.message = message
         self.status_code = status_code
         self.response = response
+        self.technical_message = message  # Will be overridden if different
         super().__init__(self.message)
+    
+    def get_user_message(self):
+        """Get the user-friendly error message."""
+        return self.message
+    
+    def get_technical_message(self):
+        """Get the technical error message for debugging."""
+        return getattr(self, 'technical_message', self.message)
 
 
 class TimrApi:
@@ -98,7 +108,10 @@ class TimrApi:
         try:
             logger.debug(f"API Request: {method} {url}")
             logger.debug(f"Params: {params}")
-            logger.debug(f"Data: {json.dumps(data) if data else None}")
+            if data:
+                # Log sanitized data (no sensitive info)
+                sanitized_data = timr_api_error_handler._sanitize_request_data(data)
+                logger.debug(f"Data: {json.dumps(sanitized_data)}")
 
             response = self.session.request(
                 method=method,
@@ -118,36 +131,88 @@ class TimrApi:
 
             return response.json()
         except requests.exceptions.HTTPError as e:
-            error_msg = f"API request failed with status code {e.response.status_code}"
             status_code = e.response.status_code
             response_data = None
+            error_msg = f"API request failed with status code {status_code}"
 
+            # Extract detailed error information from response
             try:
-                if e.response.headers.get('Content-Type',
-                                          '').startswith('application/json'):
+                if e.response.headers.get('Content-Type', '').startswith('application/json'):
                     response_data = e.response.json()
-                    if isinstance(response_data,
-                                  dict) and "message" in response_data:
-                        error_msg = response_data["message"]
+                    if isinstance(response_data, dict):
+                        # Use API-provided error message if available
+                        if "message" in response_data:
+                            error_msg = response_data["message"]
+                        elif "error" in response_data:
+                            error_msg = response_data["error"]
+                        elif "detail" in response_data:
+                            error_msg = response_data["detail"]
                 else:
-                    response_data = e.response.text
+                    response_data = e.response.text[:500]  # Limit text response length
             except Exception:
-                response_data = e.response.text
+                response_data = e.response.text[:500] if hasattr(e.response, 'text') else None
 
-            logger.error(f"API Error: {error_msg}")
-            raise TimrApiError(error_msg, status_code, response_data) from e
+            # Enhanced logging with context
+            # Create an exception with the meaningful error message
+            meaningful_error = Exception(error_msg)
+            user_message = timr_api_error_handler.log_api_error(
+                error=meaningful_error,
+                endpoint=endpoint,
+                status_code=status_code,
+                response=response_data,
+                request_data=data,
+                user_id=getattr(self.user, 'id', None) if self.user else None,
+                operation=f"{method} {endpoint}"
+            )
+            
+            # Create enhanced TimrApiError with user-friendly message
+            api_error = TimrApiError(user_message, status_code, response_data)
+            api_error.technical_message = error_msg  # Keep technical message for debugging
+            raise api_error from e
+            
         except requests.exceptions.ConnectionError as e:
-            logger.error(f"Connection error: {str(e)}")
-            raise TimrApiError(
-                "Connection error. Please check your internet connection."
-            ) from e
+            user_message = timr_api_error_handler.log_error(
+                error=e,
+                context=ErrorContext(
+                    category=ErrorCategory.NETWORK,
+                    severity=ErrorSeverity.MEDIUM,
+                    operation=f"{method} {endpoint}",
+                    user_id=getattr(self.user, 'id', None) if self.user else None,
+                    api_endpoint=endpoint,
+                    request_data=data
+                )
+            )
+            raise TimrApiError(user_message) from e
+            
         except requests.exceptions.Timeout as e:
-            logger.error(f"Request timed out: {str(e)}")
-            raise TimrApiError(
-                "Request timed out. Please try again later.") from e
+            # Create a timeout-specific error message
+            timeout_error = Exception(f"Request timed out: {str(e)}")
+            user_message = timr_api_error_handler.log_error(
+                error=timeout_error,
+                context=ErrorContext(
+                    category=ErrorCategory.NETWORK,
+                    severity=ErrorSeverity.MEDIUM,
+                    operation=f"{method} {endpoint} (timeout)",
+                    user_id=getattr(self.user, 'id', None) if self.user else None,
+                    api_endpoint=endpoint,
+                    request_data=data
+                )
+            )
+            raise TimrApiError(user_message) from e
+            
         except requests.exceptions.RequestException as e:
-            logger.error(f"Request error: {str(e)}")
-            raise TimrApiError(f"API request failed: {str(e)}") from e
+            user_message = timr_api_error_handler.log_error(
+                error=e,
+                context=ErrorContext(
+                    category=ErrorCategory.NETWORK,
+                    severity=ErrorSeverity.HIGH,
+                    operation=f"{method} {endpoint}",
+                    user_id=getattr(self.user, 'id', None) if self.user else None,
+                    api_endpoint=endpoint,
+                    request_data=data
+                )
+            )
+            raise TimrApiError(user_message) from e
 
     def _request_paginated(self, endpoint, params=None, limit=500, max_pages=None):
         """
@@ -668,11 +733,42 @@ class TimrApi:
         try:
             return self._request("POST", "/project-times", data=data)
         except TimrApiError as e:
-            # Enhance error message for common issues
-            if "Task is not bookable" in str(e):
-                raise TimrApiError(
-                    "Task is not bookable. Please select a different task or check if the task is active.",
-                    e.status_code, e.response)
+            # Enhanced business rule detection and user messaging
+            error_msg = str(e).lower()
+            technical_msg = getattr(e, 'technical_message', str(e))
+            
+            # Detect specific business rule violations
+            if "not bookable" in error_msg or "task is not bookable" in error_msg:
+                user_msg = timr_api_error_handler.log_business_rule_violation(
+                    rule_type="non_bookable_task",
+                    details=f"Task {task_id} is not bookable",
+                    user_id=getattr(self.user, 'id', None) if self.user else None,
+                    task_id=task_id
+                )
+                enhanced_error = TimrApiError(user_msg, e.status_code, e.response)
+                enhanced_error.technical_message = technical_msg
+                raise enhanced_error from e
+            elif "frozen" in error_msg or "locked" in error_msg:
+                user_msg = timr_api_error_handler.log_business_rule_violation(
+                    rule_type="frozen_time",
+                    details="Working time is frozen and cannot be modified",
+                    user_id=getattr(self.user, 'id', None) if self.user else None
+                )
+                enhanced_error = TimrApiError(user_msg, e.status_code, e.response)
+                enhanced_error.technical_message = technical_msg
+                raise enhanced_error from e
+            elif "overlap" in error_msg:
+                user_msg = timr_api_error_handler.log_business_rule_violation(
+                    rule_type="overlapping_times",
+                    details="Time entry overlaps with existing entries",
+                    user_id=getattr(self.user, 'id', None) if self.user else None,
+                    task_id=task_id
+                )
+                enhanced_error = TimrApiError(user_msg, e.status_code, e.response)
+                enhanced_error.technical_message = technical_msg
+                raise enhanced_error from e
+            
+            # Re-raise with original error if no specific rule detected
             raise
 
     def get_project_time(self, project_time_id):

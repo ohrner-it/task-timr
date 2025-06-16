@@ -13,6 +13,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from timr_api import TimrApi, TimrApiError
 from timr_utils import ProjectTimeConsolidator, UIProjectTime
 from config import COMPANY_ID, TIME_FORMAT, DATE_FORMAT, TASKLIST_TIMR_USER, TASKLIST_TIMR_PASSWORD, SESSION_SECRET
+from error_handler import app_error_handler, ErrorCategory, ErrorSeverity, ErrorContext
 
 # Configure logging
 logging.basicConfig(
@@ -163,8 +164,22 @@ def get_project_times():
             'is_fully_allocated': consolidated_data['is_fully_allocated']
         })
     except TimrApiError as e:
-        logger.error(f"Timr API Error in get_project_times: {e}")
-        return jsonify({'error': str(e)}), 400
+        user_message = e.get_user_message()
+        logger.error(f"Timr API Error in get_project_times: {e.get_technical_message()}")
+        return jsonify({'error': user_message}), 400
+    except Exception as e:
+        user_message = app_error_handler.log_error(
+            error=e,
+            context=ErrorContext(
+                category=ErrorCategory.SYSTEM,
+                severity=ErrorSeverity.HIGH,
+                operation="get_project_times",
+                user_id=user.get('id') if user else None,
+                working_time_id=working_time_id,
+                request_data={'working_time_id': working_time_id}
+            )
+        )
+        return jsonify({'error': user_message}), 500
 
 
 def get_current_user():
@@ -293,9 +308,22 @@ def get_working_times():
 
         # Return working times to client
         return jsonify({'data': working_times})
+    except TimrApiError as e:
+        user_message = e.get_user_message()
+        logger.error(f"Timr API Error in get_working_times: {e.get_technical_message()}")
+        return jsonify({'error': user_message}), 400
     except Exception as e:
-        logger.error(f"Error in get_working_times: {e}")
-        return jsonify({'error': str(e)}), 400
+        user_message = app_error_handler.log_error(
+            error=e,
+            context=ErrorContext(
+                category=ErrorCategory.SYSTEM,
+                severity=ErrorSeverity.HIGH,
+                operation="get_working_times",
+                user_id=user.get('id') if user else None,
+                request_data={'date': date_str}
+            )
+        )
+        return jsonify({'error': user_message}), 500
 
 
 @app.route('/api/working-times', methods=['POST'])
@@ -360,8 +388,21 @@ def create_working_time():
 
         return jsonify({'working_time': working_time})
     except TimrApiError as e:
-        logger.error(f"Timr API Error in create_working_time: {e}")
-        return jsonify({'error': str(e)}), 400
+        user_message = e.get_user_message()
+        logger.error(f"Timr API Error in create_working_time: {e.get_technical_message()}")
+        return jsonify({'error': user_message}), 400
+    except Exception as e:
+        user_message = app_error_handler.log_error(
+            error=e,
+            context=ErrorContext(
+                category=ErrorCategory.SYSTEM,
+                severity=ErrorSeverity.HIGH,
+                operation="create_working_time",
+                user_id=user.get('id') if user else None,
+                request_data=data
+            )
+        )
+        return jsonify({'error': user_message}), 500
 
 
 @app.route('/api/working-times/<working_time_id>', methods=['PATCH'])
@@ -714,11 +755,28 @@ def add_ui_project_time(working_time_id):
     task_breadcrumbs = data.get('task_breadcrumbs', '')
     duration_minutes = data.get('duration_minutes', 0)
 
-    if not task_id or not task_name:
-        return jsonify({'error': 'task_id and task_name are required'}), 400
+    # Enhanced input validation with detailed error logging
+    if not task_id:
+        user_message = app_error_handler.log_validation_error(
+            field="task_id", value=task_id, reason="task_id is required",
+            user_id=user.get('id') if user else None
+        )
+        return jsonify({'error': user_message}), 400
 
-    if duration_minutes <= 0:
-        return jsonify({'error': 'duration_minutes must be positive'}), 400
+    if not task_name:
+        user_message = app_error_handler.log_validation_error(
+            field="task_name", value=task_name, reason="task_name is required",
+            user_id=user.get('id') if user else None
+        )
+        return jsonify({'error': user_message}), 400
+
+    if not isinstance(duration_minutes, (int, float)) or duration_minutes <= 0:
+        user_message = app_error_handler.log_validation_error(
+            field="duration_minutes", value=duration_minutes, 
+            reason="duration_minutes must be a positive number",
+            user_id=user.get('id') if user else None
+        )
+        return jsonify({'error': user_message}), 400
 
     # Set token in API client
     timr_api.token = session.get('token')
@@ -781,28 +839,50 @@ def add_ui_project_time(working_time_id):
             'is_over_allocated': result['is_over_allocated']
         })
 
-    except (TimrApiError, ValueError) as e:
-        logger.error(f"Error in add_ui_project_time: {e}", extra={
+    except TimrApiError as e:
+        user_message = e.get_user_message()
+        logger.error(f"Timr API Error in add_ui_project_time: {e.get_technical_message()}", extra={
             'working_time_id': working_time_id,
             'task_id': task_id,
             'task_name': task_name,
             'duration_minutes': duration_minutes,
             'user_id': user.get('id') if user else None,
             'request_data': data,
-            'error_type': type(e).__name__
+            'error_type': type(e).__name__,
+            'status_code': e.status_code,
+            'api_response': e.response
         })
-        return jsonify({'error': str(e)}), 400
+        return jsonify({'error': user_message}), 400
+    except ValueError as e:
+        user_message = app_error_handler.log_validation_error(
+            field="ui_project_time_data",
+            value=data,
+            reason=str(e),
+            user_id=user.get('id') if user else None
+        )
+        logger.error(f"Validation error in add_ui_project_time: {e}", extra={
+            'working_time_id': working_time_id,
+            'task_id': task_id,
+            'task_name': task_name,
+            'duration_minutes': duration_minutes,
+            'user_id': user.get('id') if user else None,
+            'request_data': data
+        })
+        return jsonify({'error': user_message}), 400
     except Exception as e:
-        logger.error(f"Unexpected error in add_ui_project_time: {e}", extra={
-            'working_time_id': working_time_id,
-            'task_id': task_id,
-            'task_name': task_name,
-            'duration_minutes': duration_minutes,
-            'user_id': user.get('id') if user else None,
-            'request_data': data,
-            'error_type': type(e).__name__
-        })
-        return jsonify({'error': 'Internal server error'}), 500
+        user_message = app_error_handler.log_error(
+            error=e,
+            context=ErrorContext(
+                category=ErrorCategory.SYSTEM,
+                severity=ErrorSeverity.HIGH,
+                operation="add_ui_project_time",
+                user_id=user.get('id') if user else None,
+                working_time_id=working_time_id,
+                task_id=task_id,
+                request_data=data
+            )
+        )
+        return jsonify({'error': user_message}), 500
 
 
 @app.route('/api/working-times/<working_time_id>/ui-project-times/<task_id>',
