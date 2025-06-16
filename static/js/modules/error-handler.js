@@ -86,14 +86,50 @@ async function handleApiError(response, requestContext) {
         }
     };
 
-    const errorMessage = response.status === 401 
-        ? "Please log in to your Timr account to view and manage working times"
-        : (responseData.error || `HTTP ${response.status}: Failed to ${requestContext.operation}`);
+    // Enhanced error message handling with backend error categorization
+    let errorMessage;
+    
+    if (response.status === 401) {
+        errorMessage = "Please log in to your Timr account to view and manage working times";
+    } else if (responseData.error) {
+        // Use the user-friendly error message from the enhanced backend
+        errorMessage = responseData.error;
+    } else {
+        // Fallback for cases where backend doesn't provide user message
+        switch (response.status) {
+            case 400:
+                errorMessage = "Invalid request. Please check your input and try again.";
+                break;
+            case 403:
+                errorMessage = "Access denied. You don't have permission for this operation.";
+                break;
+            case 404:
+                errorMessage = "The requested resource was not found.";
+                break;
+            case 409:
+                errorMessage = "This operation conflicts with existing data.";
+                break;
+            case 422:
+                errorMessage = "The data provided is invalid or incomplete.";
+                break;
+            case 500:
+                errorMessage = "The server encountered an error. Please try again later.";
+                break;
+            case 502:
+            case 503:
+                errorMessage = "The service is temporarily unavailable. Please try again later.";
+                break;
+            default:
+                errorMessage = `HTTP ${response.status}: Failed to ${requestContext.operation}`;
+        }
+    }
     
     const apiError = new Error(errorMessage);
     apiError.isApiError = true;
     apiError.status = response.status;
     apiError.responseData = responseData;
+    apiError.userMessage = errorMessage;  // Store user-friendly message separately
+    apiError.technicalMessage = responseData.technical_message || responseData.error || errorMessage;
     
     // Log the error with detailed context
     logApiError(requestContext.operation, apiError, errorContext);
@@ -194,7 +230,8 @@ export async function handleFormSubmission(submitFunction, options = {}) {
                 modalContext,
                 additionalContext: {
                     formId: form?.id,
-                    formData: form ? new FormData(form) : null
+                    formType: form?.tagName,
+                    formAction: form?.action
                 }
             });
         }
