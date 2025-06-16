@@ -6,22 +6,32 @@ This comprehensive guide explains how to run, extend, and maintain the test suit
 
 Our testing philosophy follows these fundamental principles:
 
-1. **Test the real thing** - Test actual production code, not mock implementations
-2. **Write tests first** - Tests should drive the design and implementation
-3. **Mock only the boundary** - Mock external dependencies, not the code under test
-4. **Test behavior, not implementation** - Focus on what the code does, not how it does it
-5. **Keep tests independent and stateless** - Each test should run in isolation
-6. **Make tests fast and reliable** - Tests should execute quickly and consistently
-7. **Use descriptive test names** - Test names should clearly explain what is being tested
-8. **One assertion per test** - Each test should verify one specific behavior
-9. **Test edge cases and error conditions** - Cover boundary conditions and failure scenarios
-10. **Maintain tests like production code** - Keep tests clean, readable, and well-organized
+1. **Test the real thing.**
+   Call production code—not copies, not helper facades—and assert on its *observable* outputs or side-effects.
+2. **One reason to fail.**
+   Structure each test around a single behaviour or branch (Arrange → Act → Assert). Multiple assertions are fine if they cover the same concept.
+3. **Mock only the boundary, never the subject.**
+   Stub or mock *external* collaborators you don’t control (DB, message bus, HTTP service), but never the class or function under test.
+4. **Don’t re-implement logic in the test.**
+   Hard-code simple inputs and the expected result; duplicating algorithms inside the test just hides bugs.
+5. **Keep tests independent and stateless.**
+   No shared globals, singletons, or reused objects across test cases; reset or re-create fresh fixtures every run.
+6. **Fail fast, diagnostically.**
+   A failing assertion must read like an error message a human can act on instantly—avoid cryptic comparisons or large diffs.
+7. **Adapt the test, not the production code.**
+   If a deliberate refactor breaks a test, fix the test. Add logic to production code *only* when it serves real behaviour, never as a shim to appease a test.
+8. **Be deterministic and fast.**
+   Eliminate randomness, real time, network, and file-system dependencies; aim for sub-second execution so the suite can be run constantly.
+9. **Cover contracts, not percentages.**
+   Strive for meaningful paths and edge cases; 100 % line-coverage is worthless if assertions are superficial or completely missing.
+10. **Validate external-system assumptions separately.**
+    Write contract/integration tests against a real instance, container, or contract verifier to ensure your mocks reflect reality.
 
 ## Test Structure and Naming Conventions
 
 ### Python Test Files
 
-Follow the pattern: `test_<module_under_test>[_<specific_test_topic>].py`
+Follow the file name pattern: `test_<module_under_test>[_<specific_test_topic>].py`
 
 Examples:
 - `test_app.py` - Main application module tests
@@ -32,7 +42,7 @@ Examples:
 
 ### JavaScript Test Files
 
-Follow the pattern: `<module_under_test>.test.js`
+Follow the file name pattern: `<module_under_test>.test.js`
 
 Examples:
 - `time-utils.test.js` - Time parsing and formatting functions
