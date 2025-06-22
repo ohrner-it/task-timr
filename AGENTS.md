@@ -46,38 +46,39 @@ These guidelines apply to the entire repository.
 ./start.sh --host 0.0.0.0 --port 8080
 ```
 
-## Development Workflow
-- If the task is not fully clear or is lacking relevant information, please ask back
-  and obtain this information before starting the task. You may suggest solutions,
-  but also let the user confirm them.
-- Use **test driven development**. Write or adapt tests first, then implement the
-  desired functionality.
-- Run all tests before committing. The recommended command is:
-  ```bash
-  ./run_all_tests.sh
-  ```
-  This executes Python tests via `python3 run_tests.py` and JavaScript tests via
-  `npm test` in `tests/frontend`.
-  - Integration tests that talk to the real Timr.com API are required when adding
-    or adjusting code that interacts with external services.
-  - ALL tests MUST finish successfully before any modifications are allowed to
-    be committed.
-- Before you consider a task as completed or finished, critically review all
-  changes you did and verify that these follow the project's coding and testing
-  guidelines and rules.
-  - In particular, tests MUST test the real code. Tests which only work on
-    Mocks or duplicate the logic under test in their own implementation are
-    meaningless and MUST be rewritten to follow the "Ten Laws for Unit Tests"
-    (see below).
-  - If you find violations of the guidelines or rules laid out in here or the
-    project documentation, go back and restart your work to resolve these findings.
-    After you consider the issues resolved, make sure all tests really pass, and
-    then critically review again. Repeat until the review does not find any
-    violations of the project's coding and testing guidelines and rules any more.
-- Refrain from creating new documentation files which in detail describe the
-  changes performed for the current task. Such documentation files serve no
-  long-term purpose, clutter the documentation folder and get obsolete nearly
-  immediately. See the instructions on how to update the documentation below.
+## IMPORTANT: Follow This Development Workflow
+1. If the task is not fully clear or is lacking relevant information, please ask back
+   and obtain this information before starting the task. You may suggest solutions,
+   but also let the user confirm them.
+2. Use **test driven development**. Write or adapt tests first, then implement the
+   desired functionality.
+3. Before you consider a task as completed or finished, critically review all
+   changes you did and verify that these follow the project's coding and testing
+   guidelines and rules.
+   - In particular, tests MUST test the real code. Tests which only work on
+     Mocks or duplicate the logic under test in their own implementation are
+     meaningless and MUST be rewritten to follow the "Ten Laws for Unit Tests"
+     (see below).
+   - If you find violations of the guidelines or rules laid out in here or the
+     project documentation, go back to step 2. and restart your work to resolve
+     these findings. After you consider the issues resolved, make sure all tests
+     really pass, and then critically review again. Repeat until the review does
+     not find any violations of the project's coding and testing guidelines and
+     rules any more.
+4. Run all tests before committing. The recommended command is:
+   ```bash
+   ./run_all_tests.sh
+   ```
+   This executes Python tests via `python3 run_tests.py` and JavaScript tests via
+   `npm test` in `tests/frontend`.
+   - Integration tests that talk to the real Timr.com API are required when adding
+     or adjusting code that interacts with external services.
+   - ALL tests MUST finish successfully before any modifications are allowed to
+     be committed.
+5. Refrain from creating new documentation files which in detail describe the
+   changes performed for the current task. Such documentation files serve no
+   long-term purpose, clutter the documentation folder and get obsolete nearly
+   immediately. See the instructions on how to update the documentation below.
 
 ## Commit and PR Guidelines
 - Use concise commit messages: a single short summary line, followed by an empty
