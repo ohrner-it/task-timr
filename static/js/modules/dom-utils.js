@@ -22,24 +22,3 @@ export function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
-/**
- * Extract time range from working time DOM element
- * @param {Element} workingTimeItem - Working time DOM element
- * @returns {Object|null} - Object with start and end minutes, or null if invalid
- */
-export function extractTimeRangeFromWorkingTime(workingTimeItem) {
-    const timeDisplay = workingTimeItem.querySelector(".card-header .fw-bold");
-    if (!timeDisplay) return null;
-
-    const timeText = timeDisplay.textContent.trim();
-    const timeRange = timeText.split(" - ");
-    if (timeRange.length !== 2) return null;
-
-    const [startTime, endTime] = timeRange;
-    const startMinutes = parseTimeToMinutes(startTime);
-    const endMinutes = parseTimeToMinutes(endTime);
-
-    if (startMinutes === null || endMinutes === null) return null;
-
-    return { start: startMinutes, end: endMinutes };
-}

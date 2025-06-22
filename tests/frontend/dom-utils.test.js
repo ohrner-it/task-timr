@@ -4,8 +4,7 @@
  */
 
 import { 
-    escapeHtml, 
-    extractTimeRangeFromWorkingTime 
+    escapeHtml
 } from '../../static/js/modules/dom-utils.js';
 
 describe('DOM Utils Module - Real Production Code', () => {
@@ -41,50 +40,4 @@ describe('DOM Utils Module - Real Production Code', () => {
         });
     });
 
-    describe('extractTimeRangeFromWorkingTime', () => {
-        test('parses valid time ranges correctly', () => {
-            const mockWorkingTime = {
-                querySelector: jest.fn().mockReturnValue({
-                    textContent: '09:00 - 17:00'
-                })
-            };
-
-            const result = extractTimeRangeFromWorkingTime(mockWorkingTime);
-            expect(result).toEqual({
-                start: 540,   // 9:00 AM in minutes
-                end: 1020     // 5:00 PM in minutes
-            });
-        });
-
-        test('handles missing elements', () => {
-            const mockWorkingTime = {
-                querySelector: jest.fn().mockReturnValue(null)
-            };
-
-            const result = extractTimeRangeFromWorkingTime(mockWorkingTime);
-            expect(result).toBeNull();
-        });
-
-        test('handles invalid time formats', () => {
-            const mockWorkingTime = {
-                querySelector: jest.fn().mockReturnValue({
-                    textContent: 'invalid - format'
-                })
-            };
-
-            const result = extractTimeRangeFromWorkingTime(mockWorkingTime);
-            expect(result).toBeNull();
-        });
-
-        test('handles malformed time ranges', () => {
-            const mockWorkingTime = {
-                querySelector: jest.fn().mockReturnValue({
-                    textContent: 'not a time range'
-                })
-            };
-
-            const result = extractTimeRangeFromWorkingTime(mockWorkingTime);
-            expect(result).toBeNull();
-        });
-    });
 });
