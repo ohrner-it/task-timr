@@ -15,7 +15,7 @@ import {
     formatDuration, 
     getDateKey 
 } from './modules/time-utils.js';
-import { escapeHtml, extractTimeRangeFromWorkingTime } from './modules/dom-utils.js';
+import { escapeHtml } from './modules/dom-utils.js';
 import { saveExpandedState, getExpandedStates, findMostRecentlyExpandedWorkingTime } from './modules/state-management.js';
 import { logMessage, showAlert, debounce, logApiError } from './modules/ui-utils.js';
 import { fetchWithErrorHandling, handleApiResponse } from './modules/error-handler.js';
@@ -296,8 +296,8 @@ function findBestWorkingTimeForTimeAllocation() {
         return expandedWorkingTime;
     }
 
-    // Strategy 2: Time-based heuristic
-    const timeBasedWorkingTime = findWorkingTimeByCurrentTime(workingTimeItems);
+    // Strategy 2: Time-based heuristic using working time data
+    const timeBasedWorkingTime = findWorkingTimeByCurrentTime(state.workingTimes);
     if (timeBasedWorkingTime) {
         console.log(
             `Selected working time ${timeBasedWorkingTime.id} (time-based heuristic, score: ${timeBasedWorkingTime.score})`,
@@ -325,28 +325,40 @@ function findMostRecentlyExpandedWorkingTimeWrapper(workingTimeItems) {
 
 /**
  * Find working time closest to current time of day
+ * Uses working time data directly instead of parsing DOM
  *
- * @param {NodeList} workingTimeItems - All working time DOM elements
+ * @param {Array} workingTimes - Array of working time data objects
  * @returns {Object|null} - Object with id and score, or null if none found
  */
-function findWorkingTimeByCurrentTime(workingTimeItems) {
+function findWorkingTimeByCurrentTime(workingTimes) {
     const currentTimeMinutes = getCurrentTimeMinutes();
     let bestMatch = null;
     let bestScore = Infinity;
 
-    Array.from(workingTimeItems).forEach((item) => {
+    workingTimes.forEach((workingTime) => {
         try {
-            const timeRange = extractTimeRangeFromWorkingTime(item);
-            if (!timeRange) return;
+            // Skip ongoing working times (no end time)
+            if (!workingTime.end) return;
+
+            const startDate = new Date(workingTime.start);
+            const endDate = new Date(workingTime.end);
+            
+            // Skip if dates are invalid
+            if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+                return;
+            }
+            
+            const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
+            const endMinutes = endDate.getHours() * 60 + endDate.getMinutes();
 
             const score = calculateTimeDistance(
                 currentTimeMinutes,
-                timeRange.start,
-                timeRange.end,
+                startMinutes,
+                endMinutes,
             );
             if (score < bestScore) {
                 bestScore = score;
-                bestMatch = item.dataset.id;
+                bestMatch = workingTime.id;
             }
         } catch (error) {
             console.log(
@@ -360,7 +372,6 @@ function findWorkingTimeByCurrentTime(workingTimeItems) {
 
 // getCurrentTimeMinutes is now imported from modules/time-utils.js
 
-// extractTimeRangeFromWorkingTime is now imported from modules/dom-utils.js
 
 // calculateTimeDistance is now imported from modules/time-utils.js
 
@@ -1919,6 +1930,7 @@ if (typeof module !== 'undefined' && module.exports) {
         parseTimeToMinutes,
         renderWorkingTimeCard,
         calculateDurationInMinutes,
-        formatTimeFromISOString
+        formatTimeFromISOString,
+        findWorkingTimeByCurrentTime
     };
 }
