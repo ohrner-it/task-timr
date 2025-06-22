@@ -47,25 +47,31 @@ These guidelines apply to the entire repository.
 ```
 
 ## IMPORTANT: Follow This Development Workflow
-1. If the task is not fully clear or is lacking relevant information, please ask back
+1. **Requirements Clarification**: If the task is not fully clear or is lacking relevant information, please ask back
    and obtain this information before starting the task. You may suggest solutions,
    but also let the user confirm them.
-2. Use **test driven development**. Write or adapt tests first, then implement the
-   desired functionality.
-3. Before you consider a task as completed or finished, critically review all
-   changes you did and verify that these follow the project's coding and testing
-   guidelines and rules.
-   - In particular, tests MUST test the real code. Tests which only work on
-     Mocks or duplicate the logic under test in their own implementation are
-     meaningless and MUST be rewritten to follow the "Ten Laws for Unit Tests"
-     (see below).
-   - If you find violations of the guidelines or rules laid out in here or the
-     project documentation, go back to step 2. and restart your work to resolve
-     these findings. After you consider the issues resolved, make sure all tests
-     really pass, and then critically review again. Repeat until the review does
-     not find any violations of the project's coding and testing guidelines and
-     rules any more.
-4. Run all tests before committing. The recommended command is:
+
+2. **Deep Planning and Architecture Analysis**: Before writing any code, think deep and thoroughly analyze the requirements and existing codebase:
+   - **Question fundamental assumptions**: Don't just improve implementations - 
+     question whether operations are necessary at all. Ask "Why does this need 
+     to exist?" and "Is this data already available elsewhere?"
+   - **Challenge existing implementations**: If modifying existing code, critically examine 
+     whether the current approach is architecturally sound or needs redesign.
+   - **Analyze data flow**: Trace where required data originates and how it flows through 
+     the system. Avoid duplicating data or creating unnecessary transformations.
+   - **Identify anti-patterns**: Look for GUI parsing, redundant calculations, DOM mining, 
+     or format dancing. Plan to eliminate these completely, not improve them.
+   - **Design the target architecture**: Plan a clean solution that works with structured 
+     data from its source, follows separation of concerns, and avoids problematic patterns.
+   - **Validate approach**: Ensure the planned solution aligns with the project's 
+     architectural principles and doesn't introduce technical debt.
+
+3. **Test Driven Development**: Write or adapt tests first, then implement the
+   desired functionality. Tests must follow the target architecture from step 2.
+
+4. **Implementation**: Implement the solution according to the plan from step 2.
+
+5. **Test Execution**: Run all tests before committing. The recommended command is:
    ```bash
    ./run_all_tests.sh
    ```
@@ -75,10 +81,53 @@ These guidelines apply to the entire repository.
      or adjusting code that interacts with external services.
    - ALL tests MUST finish successfully before any modifications are allowed to
      be committed.
-5. Refrain from creating new documentation files which in detail describe the
+
+6. **Independent Critical Review**: Use a subagent to perform an independent, constructive 
+   review of all changes:
+   - The subagent must critically examine both the implementation and the underlying 
+     architectural decisions from step 2.
+   - The review should validate that the solution eliminates anti-patterns completely 
+     and follows sound architectural principles.
+   - The subagent should question whether the implemented approach makes fundamental sense 
+     and suggest improvements for overall software quality.
+   - If the review identifies violations of guidelines, anti-patterns, or fundamental 
+     architectural issues, **go back to step 2 (Planning)** and restart the process.
+   - Only proceed if the review confirms the solution follows all project guidelines 
+     and represents a high-quality, maintainable implementation.
+
+7. **Documentation Maintenance**: Refrain from creating new documentation files which in detail describe the
    changes performed for the current task. Such documentation files serve no
    long-term purpose, clutter the documentation folder and get obsolete nearly
    immediately. See the instructions on how to update the documentation below.
+
+### Subagent Review Instructions
+When requesting a subagent review, provide these specific instructions:
+
+```
+Perform a constructive, critical review of the implemented changes with the goal of improving overall software quality. Your review should:
+
+1. **Architectural Validation**: 
+   - Examine whether the fundamental approach makes sense
+   - Verify that anti-patterns (GUI parsing, DOM mining, redundant calculations, format dancing) have been completely eliminated
+   - Check that the solution works with structured data from its source
+
+2. **Code Quality Assessment**:
+   - Verify adherence to project coding guidelines and conventions
+   - Check for proper separation of concerns and encapsulation
+   - Ensure tests follow the "Ten Laws for Unit Tests" and test real production code
+
+3. **Implementation Review**:
+   - Validate that deprecated code and tests have been completely removed
+   - Check for proper error handling and edge case coverage
+   - Verify that changes don't introduce technical debt or workarounds
+
+4. **Recommendations**:
+   - Provide specific, actionable feedback for any issues found
+   - Suggest improvements for maintainability and code quality
+   - If fundamental issues exist, recommend returning to the planning phase
+
+Be constructively critical - the goal is to ensure high-quality, maintainable code that follows architectural best practices.
+```
 
 ## Commit and PR Guidelines
 - Use concise commit messages: a single short summary line, followed by an empty
@@ -117,11 +166,46 @@ These guidelines apply to the entire repository.
 - Automatic pagination handling for all list endpoints
 - Comprehensive error handling and API response validation
 
+## Data Flow and Architecture Validation
+
+When implementing or modifying functionality, always analyze the complete data flow:
+
+### Data Flow Analysis Checklist
+- **Trace data origins**: Where does the required data originate? (Backend API, user input, calculated values)
+- **Identify data transformations**: How is data transformed as it flows through the system?
+- **Avoid data duplication**: Don't extract, parse, or derive data that's already available in structured form
+- **Question necessity**: Before implementing data extraction or parsing, verify the data isn't already accessible
+
+### Common Anti-Patterns to Avoid
+- **GUI Parsing**: Never parse your own display text to extract data - use the original data source
+- **Redundant Calculations**: Don't recalculate values that are already computed and available
+- **DOM Mining**: Don't query DOM elements to extract data that should be passed as parameters
+- **Format Dancing**: Don't convert structured data to text and then parse it back to structure
+
+### Architecture Decision Questions
+Before implementing any data processing logic, ask:
+1. "Is this data already available in the application state?"
+2. "Can I access this data directly from its source instead of deriving it?"
+3. "Am I creating unnecessary dependencies on UI structure?"
+4. "Will this break if the UI display format changes?"
+
 ## Development Patterns
 
 ### Testing Philosophy
 - All tests must adhere to the "Ten Laws for Unit Tests" defined in the
   [Testing Guide](doc/README.Testing%20Guide.md).
+- **Deprecated Code Elimination**: When refactoring to remove anti-patterns or 
+  deprecated functionality:
+  - **Remove deprecated tests completely** - don't maintain parallel test suites
+  - **Eliminate fallback code paths** - don't test "backwards compatibility" for 
+    problematic patterns
+  - **Test the new implementation only** - focus tests on the correct approach
+  - **Verify complete removal** - ensure no traces of deprecated patterns remain
+- **Clean Refactoring Strategy**:
+  - Write tests for the target architecture first
+  - Remove deprecated code and tests in the same commit
+  - Ensure tests fail if deprecated patterns are reintroduced
+  - Don't maintain "transitional" code that supports both old and new approaches
 - Follow the **Test Structure and Naming Conventions** from the Testing Guide.
   Each Python module should have its own test file named
   `test_<module_under_test>[_<specific_test_topic>].py`.
@@ -169,9 +253,16 @@ These guidelines apply to the entire repository.
 - Take great care to extract logic into helper methods or functions, and to move as
   many of such methods as possible into separate JavaScript modules to keep the
   actual browser scripts small.
-- Do not parse your own web UI, especially not display texts! Pass or remember required
-  data in more suitable ways like using specialised HTML elements, using Cookies or
-  local storage.
+- **Do not parse your own web UI, especially not display texts!** Pass or remember 
+  required data in more suitable ways like using specialised HTML elements, using 
+  Cookies or local storage.
+- **Data Flow Principle**: Always work with structured data objects from their 
+  source rather than extracting data from DOM elements or display text. If you 
+  need data for calculations, pass it as function parameters or access it from 
+  application state.
+- **Question Data Extraction**: Before implementing any text parsing or DOM 
+  querying to extract data, verify that the data isn't already available in a 
+  structured format from the backend response or application state.
 
 ## Dealing With Unexpected Application or Code Behaviour
 - First make sure you really understand the occurring problem properly.
