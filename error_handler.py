@@ -157,6 +157,39 @@ class EnhancedErrorHandler:
         if context_details:
             log_message += f" [{', '.join(context_details)}]"
         
+        # For all API-related errors, add critical request/response details directly to the log message for immediate visibility
+        if context.request_data and context.category in [ErrorCategory.TIMR_API_ERROR, ErrorCategory.AUTHENTICATION, ErrorCategory.AUTHORIZATION, ErrorCategory.NETWORK]:
+            request_details = []
+            
+            # Extract enhanced request details if present
+            if isinstance(context.request_data, dict):
+                method = context.request_data.get('method')
+                url = context.request_data.get('url') 
+                params = context.request_data.get('params')
+                payload = context.request_data.get('payload')
+                
+                if method:
+                    request_details.append(f"method={method}")
+                if url:
+                    request_details.append(f"url={url}")
+                if params:
+                    sanitized_params = self._sanitize_request_data(params)
+                    request_details.append(f"params={json.dumps(sanitized_params)}")
+                if payload:
+                    sanitized_payload = self._sanitize_request_data(payload)
+                    request_details.append(f"payload={json.dumps(sanitized_payload)}")
+            
+            if request_details:
+                log_message += f"\nRequest Details: {', '.join(request_details)}"
+        
+        # Add response details for all API-related errors
+        if context.api_response and context.category in [ErrorCategory.TIMR_API_ERROR, ErrorCategory.AUTHENTICATION, ErrorCategory.AUTHORIZATION, ErrorCategory.NETWORK]:
+            sanitized_response = self._sanitize_response(context.api_response)
+            if isinstance(sanitized_response, dict):
+                log_message += f"\nResponse Details: {json.dumps(sanitized_response)}"
+            else:
+                log_message += f"\nResponse Details: {sanitized_response}"
+        
         # Determine if stacktrace should be included based on severity and category
         if include_stacktrace is None:
             include_stacktrace = self._should_include_stacktrace(context)
@@ -361,6 +394,9 @@ class EnhancedErrorHandler:
         for key, value in data.items():
             if any(field in key.lower() for field in sensitive_fields):
                 sanitized[key] = "***REDACTED***"
+            elif isinstance(value, dict):
+                # Recursively sanitize nested dictionaries
+                sanitized[key] = self._sanitize_request_data(value)
             else:
                 sanitized[key] = value
         

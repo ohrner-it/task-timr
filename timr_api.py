@@ -152,15 +152,24 @@ class TimrApi:
             except Exception:
                 response_data = e.response.text[:500] if hasattr(e.response, 'text') else None
 
-            # Enhanced logging with context
+            # Enhanced logging with complete request context for errors
             # Create an exception with the meaningful error message
             meaningful_error = Exception(error_msg)
+            
+            # Enhanced request data that includes method, URL, params for complete debugging context
+            enhanced_request_data = {
+                "method": method,
+                "url": url,
+                "params": params,
+                "payload": data
+            }
+            
             user_message = timr_api_error_handler.log_api_error(
                 error=meaningful_error,
                 endpoint=endpoint,
                 status_code=status_code,
                 response=response_data,
-                request_data=data,
+                request_data=enhanced_request_data,
                 user_id=getattr(self.user, 'id', None) if self.user else None,
                 operation=f"{method} {endpoint}"
             )
@@ -171,6 +180,14 @@ class TimrApi:
             raise api_error from e
             
         except requests.exceptions.ConnectionError as e:
+            # Enhanced request data for network errors
+            enhanced_request_data = {
+                "method": method,
+                "url": url,
+                "params": params,
+                "payload": data
+            }
+            
             user_message = timr_api_error_handler.log_error(
                 error=e,
                 context=ErrorContext(
@@ -179,7 +196,7 @@ class TimrApi:
                     operation=f"{method} {endpoint}",
                     user_id=getattr(self.user, 'id', None) if self.user else None,
                     api_endpoint=endpoint,
-                    request_data=data
+                    request_data=enhanced_request_data
                 )
             )
             raise TimrApiError(user_message) from e
@@ -187,6 +204,15 @@ class TimrApi:
         except requests.exceptions.Timeout as e:
             # Create a timeout-specific error message
             timeout_error = Exception(f"Request timed out: {str(e)}")
+            
+            # Enhanced request data for timeout errors
+            enhanced_request_data = {
+                "method": method,
+                "url": url,
+                "params": params,
+                "payload": data
+            }
+            
             user_message = timr_api_error_handler.log_error(
                 error=timeout_error,
                 context=ErrorContext(
@@ -195,12 +221,20 @@ class TimrApi:
                     operation=f"{method} {endpoint} (timeout)",
                     user_id=getattr(self.user, 'id', None) if self.user else None,
                     api_endpoint=endpoint,
-                    request_data=data
+                    request_data=enhanced_request_data
                 )
             )
             raise TimrApiError(user_message) from e
             
         except requests.exceptions.RequestException as e:
+            # Enhanced request data for general request exceptions
+            enhanced_request_data = {
+                "method": method,
+                "url": url,
+                "params": params,
+                "payload": data
+            }
+            
             user_message = timr_api_error_handler.log_error(
                 error=e,
                 context=ErrorContext(
@@ -209,7 +243,7 @@ class TimrApi:
                     operation=f"{method} {endpoint}",
                     user_id=getattr(self.user, 'id', None) if self.user else None,
                     api_endpoint=endpoint,
-                    request_data=data
+                    request_data=enhanced_request_data
                 )
             )
             raise TimrApiError(user_message) from e
