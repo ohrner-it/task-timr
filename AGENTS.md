@@ -95,7 +95,22 @@ These guidelines apply to the entire repository.
    - Only proceed if the review confirms the solution follows all project guidelines 
      and represents a high-quality, maintainable implementation.
 
-7. **Documentation Maintenance**: Refrain from creating new documentation files which in detail describe the
+7. **Final Quality Check**: Before you consider a task as completed or finished, critically review all
+   changes you did and verify that these follow the project's coding and testing
+   guidelines and rules.
+   - In particular, tests MUST test the real code. There is no such thing as "minor"
+     test failures or "unimportant" test failures - a failed test is a failed test
+     and somehow must be resolved.
+   - Tests which only work on Mocks or duplicate the logic under test in their own
+     implementation are meaningless and MUST be rewritten to follow the "Ten Laws
+     for Unit Tests" (see below).
+   - If you find violations of the guidelines or rules laid out in here or the
+     project documentation, go back and restart your work to resolve these findings.
+     After you consider the issues resolved, make sure all tests really pass, and
+     then critically review again. Repeat until the review does not find any
+     violations of the project's coding and testing guidelines and rules any more.
+
+8. **Documentation Maintenance**: Refrain from creating new documentation files which in detail describe the
    changes performed for the current task. Such documentation files serve no
    long-term purpose, clutter the documentation folder and get obsolete nearly
    immediately. See the instructions on how to update the documentation below.

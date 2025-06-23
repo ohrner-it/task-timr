@@ -6,6 +6,7 @@ import logging
 import requests
 from app import app
 from timr_api import TimrApi
+from tests.utils import REALISTIC_WORKING_TIME, create_working_time_variant
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -22,29 +23,11 @@ class TestDateFiltering(unittest.TestCase):
         app.config['DEBUG'] = True
         cls.client = app.test_client()
         
-        # Sample working times data for testing
+        # Sample working times data for testing using realistic structures
         cls.working_times_data = [
-            {
-                'id': 'wt1', 
-                'start': '2025-04-27T09:00:00Z',
-                'end': '2025-04-27T17:00:00Z',
-                'break_time_total_minutes': 30,
-                'status': 'changeable'
-            },
-            {
-                'id': 'wt2',
-                'start': '2025-05-01T08:30:00Z',
-                'end': '2025-05-01T16:30:00Z',
-                'break_time_total_minutes': 45,
-                'status': 'changeable'
-            },
-            {
-                'id': 'wt3',
-                'start': '2025-05-02T09:00:00Z',
-                'end': '2025-05-02T17:00:00Z',
-                'break_time_total_minutes': 30,
-                'status': 'changeable'
-            }
+            create_working_time_variant(id='wt1', start='2025-04-27T09:00:00+00:00', end='2025-04-27T17:00:00+00:00'),
+            create_working_time_variant(id='wt2', start='2025-05-01T08:30:00+00:00', end='2025-05-01T16:30:00+00:00'), 
+            create_working_time_variant(id='wt3', start='2025-05-02T09:00:00+00:00', end='2025-05-02T17:00:00+00:00')
         ]
     
     def setUp(self):

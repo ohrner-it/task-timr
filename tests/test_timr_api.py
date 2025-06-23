@@ -1,7 +1,7 @@
 import unittest
 import datetime
 import pytz
-from timr_api import TimrApi
+from timr_api import TimrApi, TimrApiError
 
 
 class TestTimrApi(unittest.TestCase):
@@ -62,6 +62,24 @@ class TestTimrApi(unittest.TestCase):
         dt_str = "2025-05-01"
         formatted = self.api._format_date_for_query(dt_str)
         self.assertEqual(formatted, "2025-05-01")
+
+
+class TestTimrApiError(unittest.TestCase):
+    """Tests for the TimrApiError exception class"""
+    
+    def test_timr_api_error_with_status(self):
+        """Test TimrApiError with status code"""
+        error = TimrApiError("Test error", 404)
+        
+        self.assertEqual(str(error), "Test error")
+        self.assertEqual(error.status_code, 404)
+
+    def test_timr_api_error_without_status(self):
+        """Test TimrApiError without status code"""
+        error = TimrApiError("Test error")
+        
+        self.assertEqual(str(error), "Test error")
+        self.assertIsNone(error.status_code)
 
 
 if __name__ == '__main__':

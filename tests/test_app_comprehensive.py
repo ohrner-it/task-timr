@@ -10,6 +10,10 @@ import datetime
 from flask import Flask
 from app import app
 from timr_api import TimrApiError
+from tests.utils import (
+    REALISTIC_LOGIN_RESPONSE, REALISTIC_WORKING_TIME, REALISTIC_WORKING_TIME_TYPE,
+    REALISTIC_TASK, create_working_time_variant, create_user_variant
+)
 
 
 class TestAppEndpointsComprehensive(unittest.TestCase):
@@ -76,11 +80,8 @@ class TestAppEndpointsComprehensive(unittest.TestCase):
 
     def test_login_post_success(self):
         """Test successful login POST request"""
-        # Mock successful login
-        self.mock_timr_api.login.return_value = {
-            'token': 'test-token',
-            'user': {'id': 'user1', 'fullname': 'Test User'}
-        }
+        # Mock successful login with realistic response structure
+        self.mock_timr_api.login.return_value = REALISTIC_LOGIN_RESPONSE
         
         response = self.app.post('/login', data={
             'username': 'testuser',
@@ -141,11 +142,7 @@ class TestAppEndpointsComprehensive(unittest.TestCase):
             sess['user'] = {'id': 'user1', 'fullname': 'Test User'}
         
         # Mock API response to match what timr_api.get_working_times returns
-        self.mock_timr_api.get_working_times.return_value = [{
-            'id': 'wt1',
-            'start': '2025-04-01T09:00:00Z',
-            'end': '2025-04-01T17:00:00Z'
-        }]
+        self.mock_timr_api.get_working_times.return_value = [REALISTIC_WORKING_TIME]
         
         response = self.app.get('/api/working-times?date=2025-04-01')
         
@@ -154,7 +151,7 @@ class TestAppEndpointsComprehensive(unittest.TestCase):
         # Production code returns {'data': working_times}
         self.assertIn('data', data)
         self.assertEqual(len(data['data']), 1)
-        self.assertEqual(data['data'][0]['id'], 'wt1')
+        self.assertEqual(data['data'][0]['id'], '11111111-2222-3333-4444-555555555555')
 
     def test_get_working_times_api_error(self):
         """Test get_working_times handles API errors"""
@@ -390,10 +387,7 @@ class TestAppEndpointsComprehensive(unittest.TestCase):
             sess['user'] = {'id': 'user1'}
         
         # Mock working time types
-        wt_types = [
-            {'id': 'type1', 'name': 'Regular'},
-            {'id': 'type2', 'name': 'Overtime'}
-        ]
+        wt_types = [REALISTIC_WORKING_TIME_TYPE]
         self.mock_timr_api.get_working_time_types.return_value = wt_types
         
         response = self.app.get('/api/working-time-types')
@@ -603,6 +597,211 @@ class TestAppUtilityFunctions(unittest.TestCase):
             # No user in session means not authenticated
             result = get_current_user()
             self.assertIsNone(result)
+
+
+class TestAppErrorHandling(unittest.TestCase):
+    """Test error handling paths that are currently uncovered"""
+    
+    def setUp(self):
+        """Set up test fixtures before each test method."""
+        self.app = app.test_client()
+        self.app.testing = True
+        self.app_context = app.app_context()
+        self.app_context.push()
+        
+        # Create a request context
+        self.request_context = app.test_request_context()
+        self.request_context.push()
+
+    def tearDown(self):
+        """Clean up after each test method."""
+        self.request_context.pop()
+        self.app_context.pop()
+
+    def test_get_ui_project_times_method_not_allowed(self):
+        """Test get_ui_project_times with malformed path"""
+        with patch('flask.session', {'token': 'test-token', 'user': {'id': 'user1'}}):
+            # This URL has empty working_time_id which causes method not allowed
+            response = self.app.get('/api/working-times//ui-project-times')
+            self.assertEqual(response.status_code, 405)
+
+    def test_get_ui_project_times_unauthorized(self):
+        """Test get_ui_project_times without authentication"""
+        with patch('flask.session', {}):
+            response = self.app.get('/api/working-times/test-id/ui-project-times')
+            self.assertEqual(response.status_code, 401)
+            data = json.loads(response.data)
+            self.assertEqual(data['error'], 'Unauthorized')
+
+    @patch('app.timr_api')
+    def test_get_ui_project_times_working_time_not_found(self, mock_timr_api):
+        """Test get_ui_project_times when working time is not found"""
+        mock_timr_api.get_working_time.return_value = None
+        
+        with self.app.session_transaction() as sess:
+            sess['token'] = 'test-token'
+            sess['user'] = {'id': 'user1'}
+        
+        response = self.app.get('/api/working-times/invalid-id/ui-project-times')
+        self.assertEqual(response.status_code, 404)
+        data = json.loads(response.data)
+        self.assertEqual(data['error'], 'Working time not found')
+
+    @patch('app.timr_api')
+    def test_add_ui_project_time_missing_task_data(self, mock_timr_api):
+        """Test add_ui_project_time with missing task data"""
+        with self.app.session_transaction() as sess:
+            sess['token'] = 'test-token'
+            sess['user'] = {'id': 'user1'}
+        
+        response = self.app.post('/api/working-times/wt1/ui-project-times', 
+                               json={})  # Missing required task data
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn('error', data)
+
+    @patch('app.timr_api')
+    def test_update_ui_project_time_unauthorized(self, mock_timr_api):
+        """Test update_ui_project_time without authentication"""
+        with patch('flask.session', {}):
+            response = self.app.patch('/api/working-times/wt1/ui-project-times/task1', 
+                                    json={'duration_minutes': 60})
+            self.assertEqual(response.status_code, 401)
+            data = json.loads(response.data)
+            self.assertEqual(data['error'], 'Unauthorized')
+
+    @patch('app.timr_api')
+    def test_delete_ui_project_time_unauthorized(self, mock_timr_api):
+        """Test delete_ui_project_time without authentication"""
+        with patch('flask.session', {}):
+            response = self.app.delete('/api/working-times/wt1/ui-project-times/task1')
+            self.assertEqual(response.status_code, 401)
+            data = json.loads(response.data)
+            self.assertEqual(data['error'], 'Unauthorized')
+
+    @patch('app.timr_api')
+    def test_search_tasks_unauthorized(self, mock_timr_api):
+        """Test search_tasks without authentication"""
+        with patch('flask.session', {}):
+            response = self.app.get('/api/tasks/search?q=test')
+            self.assertEqual(response.status_code, 401)
+            data = json.loads(response.data)
+            self.assertEqual(data['error'], 'Unauthorized')
+
+    @patch('app.timr_api')
+    def test_get_recent_tasks_unauthorized(self, mock_timr_api):
+        """Test get_recent_tasks without authentication"""
+        with patch('flask.session', {}):
+            response = self.app.get('/api/recent-tasks')
+            self.assertEqual(response.status_code, 401)
+            data = json.loads(response.data)
+            self.assertEqual(data['error'], 'Unauthorized')
+
+    @patch('app.timr_api')
+    def test_health_timr_api_error(self, mock_timr_api):
+        """Test health endpoint always returns healthy (no external dependency check)"""
+        mock_timr_api.get_working_time_types.side_effect = TimrApiError("API Error", 500)
+        
+        response = self.app.get('/health')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(data['status'], 'healthy')
+        self.assertIn('timestamp', data)
+
+    @patch('app.timr_api')
+    def test_health_general_exception(self, mock_timr_api):
+        """Test health endpoint always returns healthy (no external dependency check)"""
+        mock_timr_api.get_working_time_types.side_effect = Exception("Connection error")
+        
+        response = self.app.get('/health')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(data['status'], 'healthy')
+        self.assertIn('timestamp', data)
+
+    @patch('app.timr_api')
+    def test_create_working_time_timr_api_error(self, mock_timr_api):
+        """Test create_working_time with Timr API error"""
+        mock_timr_api.create_working_time.side_effect = TimrApiError("Validation error", 400)
+        
+        with self.app.session_transaction() as sess:
+            sess['token'] = 'test-token'
+            sess['user'] = {'id': 'user1'}
+        
+        response = self.app.post('/api/working-times', json={
+            'date': '2025-04-01',
+            'start_time': '09:00',
+            'end_time': '17:00',
+            'break_minutes': 30
+        })
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn('error', data)
+
+    @patch('app.timr_api')
+    def test_update_working_time_missing_data(self, mock_timr_api):
+        """Test update_working_time with missing data"""
+        with self.app.session_transaction() as sess:
+            sess['token'] = 'test-token'
+            sess['user'] = {'id': 'user1'}
+        
+        response = self.app.patch('/api/working-times/wt1', json={})  # Empty data
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn('error', data)
+
+    @patch('app.timr_api')
+    def test_delete_working_time_api_error(self, mock_timr_api):
+        """Test delete_working_time with API error"""
+        mock_timr_api.delete_working_time.side_effect = TimrApiError("API Error", 400)
+        mock_timr_api.get_working_time.return_value = {
+            'id': 'wt1', 'start': '2025-04-01T09:00:00Z', 'end': '2025-04-01T17:00:00Z'
+        }
+        
+        with self.app.session_transaction() as sess:
+            sess['token'] = 'test-token'
+            sess['user'] = {'id': 'user1'}
+        
+        response = self.app.delete('/api/working-times/wt1')
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn('error', data)
+
+    @patch('app.timr_api')
+    def test_validate_working_times_missing_data(self, mock_timr_api):
+        """Test validate_working_times with missing data"""
+        with self.app.session_transaction() as sess:
+            sess['token'] = 'test-token'
+            sess['user'] = {'id': 'user1'}
+        
+        response = self.app.post('/api/validate-working-times', json={})  # Missing working_times
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertEqual(data['error'], 'working_times is required')
+
+    def test_health_endpoint(self):
+        """Test health endpoint returns proper response"""
+        response = self.app.get('/health')
+        
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(data['status'], 'healthy')
+        self.assertIn('timestamp', data)
+        self.assertEqual(data['service'], 'task-timr')
+
+    def test_api_endpoints_require_authentication(self):
+        """Test API endpoints return 401 without authentication"""
+        endpoints = [
+            '/api/working-times',
+            '/api/tasks/search?q=test',
+            '/api/recent-tasks',
+            '/api/working-time-types'
+        ]
+        
+        for endpoint in endpoints:
+            with self.subTest(endpoint=endpoint):
+                response = self.app.get(endpoint)
+                self.assertEqual(response.status_code, 401)
 
 
 if __name__ == '__main__':

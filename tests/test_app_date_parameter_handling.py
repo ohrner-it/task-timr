@@ -10,7 +10,7 @@ class TestDateParameterHandling(unittest.TestCase):
         """Set up test fixtures before each test method."""
         self.api = TimrApi()
         self.api.token = "test-token"
-        self.api.user = {"id": "test-user-id"}
+        self.api.user = {"id": "test-user-id-12345"}
     
     @patch('timr_api.requests.Session.request')
     def test_working_times_date_parameter_names_correct(self, mock_request):

@@ -293,6 +293,10 @@ class EnhancedTimrIntegrationTest(unittest.TestCase):
             self.skipTest("Not enough tasks available for testing")
 
         bookable_tasks = [self._find_bookable_task([task]) for task in tasks]
+        bookable_tasks = [task for task in bookable_tasks if task is not None]
+        
+        if len(bookable_tasks) < 3:
+            self.skipTest("Not enough bookable tasks available for testing")
 
         # Add multiple tasks using incremental updates
         initial_call_count = self._count_recent_api_calls()
@@ -345,6 +349,10 @@ class EnhancedTimrIntegrationTest(unittest.TestCase):
             self.skipTest("Not enough tasks available for testing")
 
         bookable_tasks = [self._find_bookable_task([task]) for task in tasks]
+        bookable_tasks = [task for task in bookable_tasks if task is not None]
+        
+        if len(bookable_tasks) < 4:
+            self.skipTest("Not enough bookable tasks available for testing")
 
         # Phase 1: Add three tasks
         for i, task in enumerate(bookable_tasks[:3]):
@@ -408,6 +416,10 @@ class EnhancedTimrIntegrationTest(unittest.TestCase):
             self.skipTest("Not enough tasks available for testing")
 
         bookable_tasks = [self._find_bookable_task([task]) for task in tasks]
+        bookable_tasks = [task for task in bookable_tasks if task is not None]
+        
+        if len(bookable_tasks) < 2:
+            self.skipTest("Not enough bookable tasks available for testing")
 
         # Add tasks with specific durations
         durations = [90, 120]  # 1.5h, 2h
@@ -453,6 +465,9 @@ class EnhancedTimrIntegrationTest(unittest.TestCase):
             self.skipTest("No tasks available for testing")
 
         bookable_task = self._find_bookable_task(tasks)
+        
+        if not bookable_task:
+            self.skipTest("No bookable tasks available for testing")
 
         # Add a valid task first
         self.consolidator.add_ui_project_time(working_time=working_time,

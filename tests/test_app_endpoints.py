@@ -4,6 +4,7 @@ import json
 import datetime
 from app import app
 from timr_utils import UIProjectTime, ProjectTimeConsolidator
+from tests.utils import REALISTIC_LOGIN_RESPONSE
 
 
 class TestUIProjectTimeEndpoints(unittest.TestCase):
@@ -24,22 +25,16 @@ class TestUIProjectTimeEndpoints(unittest.TestCase):
         self.session_patch = patch('flask.session')
         self.mock_session = self.session_patch.start()
         
-        # Configure session.get to return user data
+        # Configure session.get to return realistic user data
         self.mock_session.get.side_effect = lambda key, default=None: {
-            'token': 'test-token',
-            'user': {
-                'id': 'user1',
-                'fullname': 'Test User'
-            }
+            'token': REALISTIC_LOGIN_RESPONSE['token'],
+            'user': REALISTIC_LOGIN_RESPONSE['user']
         }.get(key, default)
         
         # Mock the get_current_user function
         self.get_current_user_patch = patch('app.get_current_user')
         self.mock_get_current_user = self.get_current_user_patch.start()
-        self.mock_get_current_user.return_value = {
-            'id': 'user1',
-            'fullname': 'Test User'
-        }
+        self.mock_get_current_user.return_value = REALISTIC_LOGIN_RESPONSE['user']
 
         # Mock the TimrApi
         self.timr_api_patch = patch('app.timr_api')

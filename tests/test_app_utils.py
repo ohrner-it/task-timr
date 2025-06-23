@@ -6,6 +6,7 @@ from app import parse_date, parse_time, combine_datetime, format_duration, get_w
 from config import DATE_FORMAT, TIME_FORMAT
 from timr_api import TimrApi
 from timr_utils import UIProjectTime
+from tests.utils import REALISTIC_WORKING_TIME, REALISTIC_LOGIN_RESPONSE
 
 class TestAppUtils(unittest.TestCase):
     """Test utilities from app.py"""
@@ -27,6 +28,12 @@ class TestAppUtils(unittest.TestCase):
         self.assertEqual(date.year, 2025)
         self.assertEqual(date.month, 5)
         self.assertEqual(date.day, 1)
+        
+        # Test with +00:00 timezone
+        date_str = "2025-04-01T10:30:00+00:00"
+        date = parse_date(date_str)
+        self.assertIsNotNone(date)
+        self.assertEqual(date.year, 2025)
         
         # Test invalid format
         date_str = "05/01/2025"
@@ -51,6 +58,13 @@ class TestAppUtils(unittest.TestCase):
         time = parse_time(time_str)
         self.assertIsNotNone(time)
         self.assertEqual(time.hour, 10)
+        self.assertEqual(time.minute, 30)
+        
+        # Test with +00:00 timezone  
+        time_str = "2025-04-01T14:30:00+00:00"
+        time = parse_time(time_str)
+        self.assertIsNotNone(time)
+        self.assertEqual(time.hour, 14)
         self.assertEqual(time.minute, 30)
         
         # Test invalid format
@@ -90,6 +104,11 @@ class TestAppUtils(unittest.TestCase):
         # Test multiple hours
         duration = format_duration(150)
         self.assertEqual(duration, "2h 30m")
+        
+        # Test edge cases
+        self.assertEqual(format_duration(0), "0h 0m")  # Zero duration
+        self.assertEqual(format_duration(1500), "25h 0m")  # Large duration
+        self.assertEqual(format_duration(1), "0h 1m")  # Single minute
 
 class TestApiEndpoints(unittest.TestCase):
     """Test the API endpoints in app.py"""
@@ -114,9 +133,7 @@ class TestApiEndpoints(unittest.TestCase):
         from app import get_working_times
         
         # Configure the mock timr_api instance
-        mock_timr_api.get_working_times.return_value = [
-            {'id': 'wt1', 'start': '2025-05-01T09:00:00Z', 'end': '2025-05-01T17:00:00Z'}
-        ]
+        mock_timr_api.get_working_times.return_value = [REALISTIC_WORKING_TIME]
         
         # Mock the request
         with self.app.test_request_context('/api/working-times?date=2025-05-01'):
@@ -124,7 +141,7 @@ class TestApiEndpoints(unittest.TestCase):
             mock_session.get.return_value = 'test_token'
             
             # Mock the current user
-            mock_get_current_user.return_value = {'id': 'test_user_id'}
+            mock_get_current_user.return_value = REALISTIC_LOGIN_RESPONSE['user']
             
             # Call the endpoint
             result = get_working_times()
@@ -141,7 +158,7 @@ class TestApiEndpoints(unittest.TestCase):
             # And should be passed to the correct API parameters
             self.assertEqual(kwargs['start_date'], '2025-05-01T00:00:00Z')
             self.assertEqual(kwargs['end_date'], '2025-05-01T23:59:59Z')
-            self.assertEqual(kwargs['user_id'], 'test_user_id')
+            self.assertEqual(kwargs['user_id'], REALISTIC_LOGIN_RESPONSE['user']['id'])
             
             # Verify the response is a valid JSON response
             # Flask test client returns a Response object or a tuple (response, status_code)
@@ -176,7 +193,7 @@ class TestApiEndpoints(unittest.TestCase):
             mock_session.get.return_value = 'test_token'
             
             # Mock the current user
-            mock_get_current_user.return_value = {'id': 'test_user_id'}
+            mock_get_current_user.return_value = REALISTIC_LOGIN_RESPONSE['user']
             
             # Call the endpoint
             result = get_working_times()
@@ -237,7 +254,7 @@ class TestApiEndpoints(unittest.TestCase):
         with self.app.test_request_context('/api/project-times?working_time_id=wt1'):
             # Mock the session and user
             mock_session.get.return_value = 'test_token'
-            mock_get_current_user.return_value = {'id': 'test_user_id'}
+            mock_get_current_user.return_value = REALISTIC_LOGIN_RESPONSE['user']
             
             # Call the endpoint
             result = get_project_times()
@@ -265,6 +282,18 @@ class TestApiEndpoints(unittest.TestCase):
             self.assertEqual(project_time['task_id'], 'task1')
             self.assertEqual(project_time['task_name'], 'Task 1')
             self.assertEqual(project_time['duration_minutes'], 60)
+
+    def test_format_date_with_datetime_object(self):
+        """Test format_date with datetime object"""
+        from app import format_date
+        dt = datetime.datetime(2025, 4, 1, 10, 30)
+        result = format_date(dt)
+        self.assertEqual(result, "2025-04-01")
+        
+        # Test with non-datetime object (should return as-is)
+        date_str = "2025-04-01"
+        result = format_date(date_str)
+        self.assertEqual(result, "2025-04-01")
 
 if __name__ == "__main__":
     unittest.main()

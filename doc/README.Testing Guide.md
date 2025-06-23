@@ -68,6 +68,7 @@ The test suite consists of six main components:
 5. **Duration Parsing Tests**: Tests for user input validation and Jira-style duration parsing
 6. **Integration Tests**: Tests against the real Timr.com API service
 
+
 ## Integration Testing with Real APIs
 
 Integration tests verify that our implementation works correctly with the actual Timr.com API service, rather than relying solely on mocked responses.

@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import Mock, patch, MagicMock, call
 import datetime
 from timr_utils import UIProjectTime, ProjectTimeConsolidator
+from tests.utils import REALISTIC_WORKING_TIME, REALISTIC_PROJECT_TIME
 
 
 class TestUIProjectTime(unittest.TestCase):
@@ -106,6 +107,13 @@ class TestProjectTimeConsolidator(unittest.TestCase):
         """Set up test fixtures"""
         self.mock_timr_api = Mock()
         self.consolidator = ProjectTimeConsolidator(self.mock_timr_api)
+    
+    def test_initialization(self):
+        """Test ProjectTimeConsolidator initialization"""
+        mock_api = Mock()
+        consolidator = ProjectTimeConsolidator(mock_api)
+        
+        self.assertEqual(consolidator.timr_api, mock_api)
 
         # Create a sample working time
         self.working_time = {
@@ -326,6 +334,66 @@ class TestUIProjectTimeEdgeCases(unittest.TestCase):
         ui_pt = UIProjectTime.from_dict(partial_data)
         self.assertEqual(ui_pt.task_id, "task123")
         # Should handle invalid duration gracefully
+    
+    def test_initialization_with_required_parameters(self):
+        """Test UIProjectTime with all required parameters"""
+        ui_pt = UIProjectTime("task1", "Task Name", 60, "Project/Task")
+        
+        self.assertEqual(ui_pt.task_id, "task1")
+        self.assertEqual(ui_pt.task_name, "Task Name")
+        self.assertEqual(ui_pt.duration_minutes, 60)
+        self.assertEqual(ui_pt.task_breadcrumbs, "Project/Task")
+        self.assertFalse(ui_pt.deleted)
+    
+    def test_add_project_time_with_valid_data(self):
+        """Test add_project_time with valid data"""
+        ui_pt = UIProjectTime("task1", "Task", 60)
+        project_time = {"id": "pt1", "start": "2025-04-01T09:00:00Z"}
+        
+        ui_pt.add_project_time(project_time)
+        
+        self.assertIn("pt1", ui_pt.project_time_ids)
+        self.assertIn(project_time, ui_pt.source_project_times)
+        
+    def test_to_json_method(self):
+        """Test toJSON method"""
+        ui_pt = UIProjectTime("task1", "Task", 60)
+        
+        json_str = ui_pt.toJSON()
+        
+        self.assertIsInstance(json_str, str)
+        import json
+        parsed = json.loads(json_str)
+        self.assertEqual(parsed["task_id"], "task1")
+    
+    def test_from_dict_complete_data(self):
+        """Test from_dict with complete data"""
+        data = {
+            "task_id": "task1",
+            "task_name": "Task Name",
+            "duration_minutes": 120,
+            "task_breadcrumbs": "Project/Task",
+            "deleted": True,
+            "project_time_ids": ["pt1", "pt2"]
+        }
+        
+        ui_pt = UIProjectTime.from_dict(data)
+        
+        self.assertEqual(ui_pt.task_id, "task1")
+        self.assertEqual(ui_pt.task_name, "Task Name")
+        self.assertEqual(ui_pt.duration_minutes, 120)
+        self.assertTrue(ui_pt.deleted)
+        self.assertEqual(ui_pt.project_time_ids, ["pt1", "pt2"])
+    
+    def test_from_dict_minimal_data(self):
+        """Test from_dict with minimal data"""
+        data = {"task_id": "task1"}
+        
+        ui_pt = UIProjectTime.from_dict(data)
+        
+        self.assertEqual(ui_pt.task_id, "task1")
+        self.assertEqual(ui_pt.task_name, "")
+        self.assertEqual(ui_pt.duration_minutes, 0)
 
     def test_duration_edge_cases(self):
         """Test UIProjectTime with edge case durations"""

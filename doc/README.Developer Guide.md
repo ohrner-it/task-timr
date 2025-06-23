@@ -401,8 +401,13 @@ task-timr/
 │   └── css/
 │       └── custom.css               # Custom styles and Bootstrap overrides
 ├── tests/                           # Test suite
+│   ├── utils/                       # Test utilities package
+│   │   ├── __init__.py              # Package exports
+│   │   ├── mock_validator.py        # Mock validation framework
+│   │   └── mock_data.py            # Reference mock data structures
 │   ├── __init__.py                  # Makes tests a Python package
 │   ├── test_*.py                    # Python unit and integration tests
+│   ├── test_comprehensive_mock_validation.py  # Mock validation tests
 │   └── frontend/                    # Frontend JavaScript tests
 │       ├── __init__.py
 │       ├── *.test.js                # Jest test files
