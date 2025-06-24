@@ -16,7 +16,14 @@ import {
     getDateKey 
 } from './modules/time-utils.js';
 import { escapeHtml } from './modules/dom-utils.js';
-import { saveExpandedState, getExpandedStates, findMostRecentlyExpandedWorkingTime } from './modules/state-management.js';
+import { 
+    saveExpandedState, 
+    getExpandedStates, 
+    findMostRecentlyExpandedWorkingTime,
+    hasExpandedStates,
+    hasExpandCollapseHistory,
+    expandDefaultWorkingTime
+} from './modules/state-management.js';
 import { logMessage, showAlert, debounce, logApiError } from './modules/ui-utils.js';
 import { fetchWithErrorHandling, handleApiResponse } from './modules/error-handler.js';
 import { sortWorkingTimesLatestFirst, sortTasksAlphabetically } from './modules/sorting-utils.js';
@@ -189,11 +196,104 @@ function getExpandedStatesWrapper() {
     return getExpandedStates(currentViewDate);
 }
 
+/**
+ * Helper function to expand a specific working time element
+ * @param {Element} workingTimeElement - The working time DOM element
+ * @param {string} workingTimeId - The working time ID
+ */
+function expandWorkingTime(workingTimeElement, workingTimeId) {
+    const detailsSection = workingTimeElement.querySelector(".working-time-details");
+    const toggleButton = workingTimeElement.querySelector(".toggle-details");
+    const icon = toggleButton?.querySelector("i");
+
+    if (detailsSection && toggleButton && icon) {
+        // Show details section
+        detailsSection.classList.remove("d-none");
+
+        // Update icon
+        icon.className = "bi bi-chevron-up";
+
+        // Save expanded state
+        saveExpandedStateWrapper(workingTimeId, true);
+
+        // Load project times for this working time
+        setTimeout(() => {
+            try {
+                const container = document.getElementById(`project-times-${workingTimeId}`);
+                if (container) {
+                    fetchUIProjectTimes(workingTimeId)
+                        .then((data) => {
+                            renderUIProjectTimes(data, { id: workingTimeId });
+                            renderTimeAllocationProgress(data, workingTimeId);
+                        })
+                        .catch((err) => {
+                            console.error(`Could not load details for ${workingTimeId}: ${err.message}`);
+                            showAlert(`Failed to load time allocations: ${err.message}`, "warning");
+                            container.innerHTML = `
+                                <div class="alert alert-warning alert-sm mb-2">
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                    Failed to load time allocations
+                                </div>
+                            `;
+                        });
+                }
+            } catch (err) {
+                console.error(`Error loading details for expanded working time: ${err.message}`);
+                showAlert(`Error restoring expanded working time: ${err.message}`, "danger");
+            }
+        }, 100);
+    }
+}
+
 function restoreExpandedStates() {
-    // Get expanded working time IDs from storage
+    console.log(`🔄 restoreExpandedStates called for date: ${currentViewDate}`);
+    
+    // Get expanded working time IDs from storage (includes newly created ones)
     const expandedIds = getExpandedStatesWrapper();
 
     if (expandedIds.length === 0) {
+        // Check if user has ever interacted with expand/collapse for this date
+        const hasHistory = hasExpandCollapseHistory(new Date(currentViewDate));
+        
+        if (!hasHistory) {
+            // User has never visited this day - expand topmost working time by default
+            console.log(`📅 First visit to ${currentViewDate} - expanding topmost working time by default`);
+            const workingTimeItems = document.querySelectorAll(".working-time-item");
+            if (workingTimeItems.length > 0) {
+                const expandedId = expandDefaultWorkingTime(workingTimeItems, new Date(currentViewDate));
+                if (expandedId) {
+                // Load project times for the expanded working time
+                setTimeout(() => {
+                    try {
+                        const container = document.getElementById(`project-times-${expandedId}`);
+                        if (container) {
+                            fetchUIProjectTimes(expandedId)
+                                .then((data) => {
+                                    renderUIProjectTimes(data, { id: expandedId });
+                                    renderTimeAllocationProgress(data, expandedId);
+                                })
+                                .catch((err) => {
+                                    console.error(`Could not load details for ${expandedId}: ${err.message}`);
+                                    showAlert(`Failed to load time allocations: ${err.message}`, "warning");
+                                    container.innerHTML = `
+                                        <div class="alert alert-warning alert-sm mb-2">
+                                            <i class="bi bi-exclamation-triangle me-2"></i>
+                                            Failed to load time allocations
+                                        </div>
+                                    `;
+                                });
+                        }
+                    } catch (err) {
+                        console.error(`Error loading details for default expanded working time: ${err.message}`);
+                        showAlert(`Error loading default working time details: ${err.message}`, "danger");
+                    }
+                }, 100);
+                }
+            }
+        } else {
+            // User has visited this day before and explicitly collapsed all working times
+            console.log(`🤐 User previously collapsed all working times for ${currentViewDate} - respecting choice`);
+        }
         return; // No expanded states to restore
     }
 
@@ -1256,6 +1356,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         // Determine if this is a create or update operation
+        const isCreating = !workingTimeId;
         const url = workingTimeId
             ? `/api/working-times/${workingTimeId}`
             : "/api/working-times";
@@ -1283,6 +1384,13 @@ document.addEventListener("DOMContentLoaded", function () {
                     `Working time ${workingTimeId ? "updated" : "created"} successfully`,
                     "success",
                 );
+
+                // If this was a creation, mark the newly created working time as expanded
+                if (isCreating && response.working_time && response.working_time.id) {
+                    // We have the exact working time ID from the API response - mark it as expanded
+                    saveExpandedState(response.working_time.id, true, new Date(dateInput.value));
+                    console.log(`✅ Marked working time ${response.working_time.id} as expanded`);
+                }
 
                 // IMPORTANT: Get the date from the form, not from state
                 // This ensures we stay on the date the user was working with
