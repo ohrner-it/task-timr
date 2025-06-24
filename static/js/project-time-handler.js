@@ -368,12 +368,6 @@ async function saveTimeAllocation(event) {
     const form = document.getElementById("time-allocation-form");
     if (!form) return;
 
-    // Store current date in localStorage before making any changes
-    const dateInput = document.getElementById("date-input");
-    if (dateInput && dateInput.value) {
-        localStorage.setItem("currentViewDate", dateInput.value);
-        console.log(`Stored current date in localStorage: ${dateInput.value}`);
-    }
 
     const taskId = form.dataset.taskId; // For editing existing UI time allocation
     const workingTimeId = form.dataset.workingTimeId;
@@ -672,10 +666,6 @@ async function saveTimeAllocation(event) {
             }
         });
 
-        // Clear the saveAndAddNew flag if it exists
-        if (form && form.dataset.saveAndAddNew) {
-            delete form.dataset.saveAndAddNew;
-        }
     }
 }
 

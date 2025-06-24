@@ -776,18 +776,6 @@ document.addEventListener("DOMContentLoaded", function () {
      * Load data for a specific date
      */
     function loadData(dateString) {
-        // Check if we're coming from an edit - use the stored date from localStorage if available
-        const storedDate = localStorage.getItem("currentViewDate");
-        if (storedDate) {
-            logMessage(
-                `Using stored date from localStorage: ${storedDate}`,
-                "info",
-            );
-            dateString = storedDate;
-            // Clear it after use
-            localStorage.removeItem("currentViewDate");
-        }
-
         if (!dateString) {
             dateString = formatDate(new Date());
         }
