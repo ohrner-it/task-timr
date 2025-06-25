@@ -77,6 +77,8 @@ class TimrApi:
         self.token_expiry = None
         self.user = None
         self.session = requests.Session()
+        # Cache for parent task data during a single get_tasks operation
+        self._parent_task_cache = {}
 
     def _request(self, method, endpoint, data=None, params=None, headers=None):
         """
@@ -649,46 +651,121 @@ class TimrApi:
 
         # Filter active tasks if requested
         if active_only:
-            now = datetime.datetime.now(pytz.UTC)
+            # Clear parent task cache for this get_tasks operation
+            self._parent_task_cache = {}
             active_tasks = []
 
             for task in all_tasks:
-                # Check if task should be active based on end_date
-                is_active = True
-
-                # Only check if the task has an end_date
-                if "end_date" in task and task["end_date"]:
-                    try:
-                        if isinstance(task["end_date"], str):
-                            # Handle timezone if present
-                            if 'Z' in task["end_date"]:
-                                task_end_date = datetime.datetime.fromisoformat(
-                                    task["end_date"].replace(
-                                        'Z', '+00:00'))
-                            elif '+' in task["end_date"] or '-' in task[
-                                    "end_date"][10:]:
-                                # Already has timezone info
-                                task_end_date = datetime.datetime.fromisoformat(
-                                    task["end_date"])
-                            else:
-                                # No timezone info, assume UTC
-                                task_end_date = datetime.datetime.fromisoformat(
-                                    task["end_date"])
-                                task_end_date = task_end_date.replace(
-                                    tzinfo=pytz.UTC)
-
-                            # Check if end date is in the future
-                            is_active = task_end_date > now
-                    except (ValueError, TypeError):
-                        # If we can't parse the date, assume task is active
-                        is_active = True
-
-                if is_active:
+                # Use the new comprehensive filtering that checks parent tasks too
+                if self._is_task_effectively_bookable(task):
                     active_tasks.append(task)
 
+            # Clear cache after filtering is complete
+            self._parent_task_cache = {}
             return active_tasks
 
         return all_tasks
+
+    def _get_task_by_id(self, task_id):
+        """
+        Get a specific task by its ID, with caching support.
+        
+        Args:
+            task_id (str): Task ID to fetch
+            
+        Returns:
+            dict: Task data
+            
+        Raises:
+            TimrApiError: If the task cannot be fetched
+        """
+        # Check cache first
+        if task_id in self._parent_task_cache:
+            return self._parent_task_cache[task_id]
+        
+        # Fetch from API and cache the result
+        try:
+            task_data = self._request("GET", f"/tasks/{task_id}")
+            self._parent_task_cache[task_id] = task_data
+            return task_data
+        except TimrApiError:
+            # Don't cache API errors - always retry failed requests
+            raise
+
+    def _is_task_effectively_bookable(self, task):
+        """
+        Check if a task is effectively bookable by verifying that both the task
+        and all its parent tasks are not closed (don't have past end_dates).
+        
+        Args:
+            task (dict): Task data to check
+            
+        Returns:
+            bool: True if task is effectively bookable, False otherwise
+        """
+        now = datetime.datetime.now(pytz.UTC)
+        
+        # Check the task itself first
+        if not self._is_task_active(task, now):
+            return False
+            
+        # Check parent tasks recursively
+        current_task = task
+        while current_task and current_task.get('parent_task'):
+            parent_info = current_task.get('parent_task')
+            parent_id = parent_info.get('id')
+            
+            if not parent_id:
+                break
+                
+            try:
+                parent_task = self._get_task_by_id(parent_id)
+                if not self._is_task_active(parent_task, now):
+                    return False
+                current_task = parent_task
+            except TimrApiError as e:
+                # If we can't fetch the parent task, assume it's active
+                # to avoid blocking tasks due to temporary API issues
+                break
+                
+        return True
+        
+    def _is_task_active(self, task, now):
+        """
+        Check if a single task is active (not past its end_date).
+        
+        Args:
+            task (dict): Task data to check
+            now (datetime): Current time for comparison
+            
+        Returns:
+            bool: True if task is active, False if closed
+        """
+        if "end_date" not in task or not task["end_date"]:
+            return True
+            
+        try:
+            end_date_str = task["end_date"]
+            if isinstance(end_date_str, str):
+                # Handle timezone if present
+                if 'Z' in end_date_str:
+                    task_end_date = datetime.datetime.fromisoformat(
+                        end_date_str.replace('Z', '+00:00'))
+                elif '+' in end_date_str or '-' in end_date_str[10:]:
+                    # Already has timezone info
+                    task_end_date = datetime.datetime.fromisoformat(end_date_str)
+                else:
+                    # No timezone info, assume UTC
+                    task_end_date = datetime.datetime.fromisoformat(end_date_str)
+                    task_end_date = task_end_date.replace(tzinfo=pytz.UTC)
+                    
+                # Check if end date is in the future
+                return task_end_date > now
+        except (ValueError, TypeError):
+            # If we can't parse the date, assume task is active
+            pass
+            
+        return True
 
     def get_project_times(self,
                           start_date=None,
