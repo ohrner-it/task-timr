@@ -1001,9 +1001,43 @@ def delete_ui_project_time(working_time_id, task_id):
             'is_over_allocated': result['is_over_allocated']
         })
 
-    except (TimrApiError, ValueError) as e:
-        logger.error(f"Error in delete_ui_project_time: {e}")
-        return jsonify({'error': str(e)}), 400
+    except TimrApiError as e:
+        user_message = e.get_user_message()
+        logger.error(f"Timr API Error in delete_ui_project_time: {e.get_technical_message()}", extra={
+            'working_time_id': working_time_id,
+            'task_id': task_id,
+            'user_id': user.get('id') if user else None,
+            'error_type': type(e).__name__,
+            'status_code': e.status_code,
+            'api_response': e.response
+        })
+        return jsonify({'error': user_message}), 400
+    except ValueError as e:
+        user_message = app_error_handler.log_validation_error(
+            field="ui_project_time_deletion",
+            value={'working_time_id': working_time_id, 'task_id': task_id},
+            reason=str(e),
+            user_id=user.get('id') if user else None
+        )
+        logger.error(f"Validation error in delete_ui_project_time: {e}", extra={
+            'working_time_id': working_time_id,
+            'task_id': task_id,
+            'user_id': user.get('id') if user else None
+        })
+        return jsonify({'error': user_message}), 400
+    except Exception as e:
+        user_message = app_error_handler.log_error(
+            error=e,
+            context=ErrorContext(
+                category=ErrorCategory.SYSTEM,
+                severity=ErrorSeverity.HIGH,
+                operation="delete_ui_project_time",
+                user_id=user.get('id') if user else None,
+                working_time_id=working_time_id,
+                task_id=task_id
+            )
+        )
+        return jsonify({'error': user_message}), 500
 
 
 @app.route('/api/working-times/<working_time_id>/ui-project-times',

@@ -261,6 +261,160 @@ class TestUIProjectTimeEndpoints(unittest.TestCase):
         self.mock_consolidator.delete_ui_project_time.assert_called_once_with(
             working_time, task_id="task1")
 
+    @patch('app.logger')
+    def test_delete_ui_project_time_timr_api_error(self, mock_logger):
+        """Test DELETE endpoint handles TimrApiError with enhanced logging."""
+        from timr_api import TimrApiError
+        
+        # Configure get_working_time to succeed
+        working_time = {
+            "id": "wt123",
+            "start": "2025-04-01T09:00:00Z",
+            "end": "2025-04-01T17:00:00Z"
+        }
+        self.mock_timr_api.get_working_time.return_value = working_time
+        
+        # Configure delete_ui_project_time to raise TimrApiError
+        api_error = TimrApiError("Project time not found", status_code=404, response={"error": "Not found"})
+        api_error.technical_message = "DELETE /project-times/pt123 failed with 404"
+        self.mock_consolidator.delete_ui_project_time.side_effect = api_error
+        
+        # Make the request
+        response = self.app.delete('/api/working-times/wt123/ui-project-times/task1')
+        
+        # Verify error response
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn('error', data)
+        self.assertEqual(data['error'], "Project time not found")
+        
+        # Verify enhanced logging was called with proper context
+        mock_logger.error.assert_called_once()
+        call_args = mock_logger.error.call_args
+        
+        # Check log message contains technical message
+        self.assertIn("DELETE /project-times/pt123 failed with 404", call_args[0][0])
+        
+        # Check extra context data
+        extra_data = call_args[1]['extra']
+        self.assertEqual(extra_data['working_time_id'], 'wt123')
+        self.assertEqual(extra_data['task_id'], 'task1')
+        self.assertEqual(extra_data['error_type'], 'TimrApiError')
+        self.assertEqual(extra_data['status_code'], 404)
+        self.assertEqual(extra_data['api_response'], {"error": "Not found"})
+        
+    @patch('app.app_error_handler')
+    @patch('app.logger')
+    def test_delete_ui_project_time_validation_error(self, mock_logger, mock_error_handler):
+        """Test DELETE endpoint handles ValueError with structured logging."""
+        # Configure get_working_time to succeed
+        working_time = {
+            "id": "wt123",
+            "start": "2025-04-01T09:00:00Z",
+            "end": "2025-04-01T17:00:00Z"
+        }
+        self.mock_timr_api.get_working_time.return_value = working_time
+        
+        # Configure delete_ui_project_time to raise ValueError
+        validation_error = ValueError("Invalid task ID format")
+        self.mock_consolidator.delete_ui_project_time.side_effect = validation_error
+        
+        # Mock the error handler to return a user-friendly message
+        mock_error_handler.log_validation_error.return_value = "The task ID format is invalid."
+        
+        # Make the request
+        response = self.app.delete('/api/working-times/wt123/ui-project-times/invalid-task')
+        
+        # Verify error response
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn('error', data)
+        self.assertEqual(data['error'], "The task ID format is invalid.")
+        
+        # Verify structured validation error logging was called
+        mock_error_handler.log_validation_error.assert_called_once_with(
+            field="ui_project_time_deletion",
+            value={'working_time_id': 'wt123', 'task_id': 'invalid-task'},
+            reason="Invalid task ID format",
+            user_id=REALISTIC_LOGIN_RESPONSE['user']['id']
+        )
+        
+        # Verify standard error logging was also called
+        mock_logger.error.assert_called_once()
+        call_args = mock_logger.error.call_args
+        self.assertIn("Validation error in delete_ui_project_time", call_args[0][0])
+        
+        # Check extra context data
+        extra_data = call_args[1]['extra']
+        self.assertEqual(extra_data['working_time_id'], 'wt123')
+        self.assertEqual(extra_data['task_id'], 'invalid-task')
+        
+    @patch('app.app_error_handler')
+    def test_delete_ui_project_time_system_error(self, mock_error_handler):
+        """Test DELETE endpoint handles unexpected exceptions with comprehensive logging."""
+        # Configure get_working_time to succeed
+        working_time = {
+            "id": "wt123",
+            "start": "2025-04-01T09:00:00Z",
+            "end": "2025-04-01T17:00:00Z"
+        }
+        self.mock_timr_api.get_working_time.return_value = working_time
+        
+        # Configure delete_ui_project_time to raise unexpected exception
+        system_error = RuntimeError("Unexpected database connection failure")
+        self.mock_consolidator.delete_ui_project_time.side_effect = system_error
+        
+        # Mock the error handler to return a user-friendly message
+        mock_error_handler.log_error.return_value = "An unexpected error occurred. Please try again or contact support."
+        
+        # Make the request
+        response = self.app.delete('/api/working-times/wt123/ui-project-times/task1')
+        
+        # Verify error response
+        self.assertEqual(response.status_code, 500)
+        data = json.loads(response.data)
+        self.assertIn('error', data)
+        self.assertEqual(data['error'], "An unexpected error occurred. Please try again or contact support.")
+        
+        # Verify comprehensive error logging was called with ErrorContext
+        mock_error_handler.log_error.assert_called_once()
+        call_args = mock_error_handler.log_error.call_args
+        
+        # Check the error parameter
+        self.assertEqual(call_args[1]['error'], system_error)
+        
+        # Check ErrorContext
+        error_context = call_args[1]['context']
+        from error_handler import ErrorCategory, ErrorSeverity
+        self.assertEqual(error_context.category, ErrorCategory.SYSTEM)
+        self.assertEqual(error_context.severity, ErrorSeverity.HIGH)
+        self.assertEqual(error_context.operation, "delete_ui_project_time")
+        self.assertEqual(error_context.user_id, REALISTIC_LOGIN_RESPONSE['user']['id'])
+        self.assertEqual(error_context.working_time_id, 'wt123')
+        self.assertEqual(error_context.task_id, 'task1')
+    
+    @patch('app.logger')
+    def test_delete_ui_project_time_working_time_not_found(self, mock_logger):
+        """Test DELETE endpoint when working time is not found."""
+        from timr_api import TimrApiError
+        
+        # Configure get_working_time to raise TimrApiError
+        api_error = TimrApiError("Working time not found", status_code=404)
+        api_error.technical_message = "GET /working-times/nonexistent failed with 404"
+        self.mock_timr_api.get_working_time.side_effect = api_error
+        
+        # Make the request
+        response = self.app.delete('/api/working-times/nonexistent/ui-project-times/task1')
+        
+        # Verify error response
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn('error', data)
+        self.assertEqual(data['error'], "Working time not found")
+        
+        # Verify the consolidator delete method was never called
+        self.mock_consolidator.delete_ui_project_time.assert_not_called()
+
     def test_replace_ui_project_times(self):
         """Test replacing all UI project times."""
         # Configure mocks
