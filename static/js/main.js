@@ -27,7 +27,7 @@ import {
 import { logMessage, showAlert, debounce, logApiError } from './modules/ui-utils.js';
 import { fetchWithErrorHandling, handleApiResponse } from './modules/error-handler.js';
 import { sortWorkingTimesLatestFirst, sortTasksAlphabetically } from './modules/sorting-utils.js';
-import { openTimeAllocationModal, openDistributeTimeModal, fetchUIProjectTimes, renderUIProjectTimes, renderTimeAllocationProgress } from './project-time-handler.js';
+import { openTimeAllocationModal, openDistributeTimeModal, fetchUIProjectTimes, renderUIProjectTimes, renderTimeAllocationProgress, initializeTimeAllocationFormListeners } from './project-time-handler.js';
 
 
 
@@ -502,6 +502,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Initialize UI event handlers
     setupEventHandlers();
+    
+    // Initialize time allocation form listeners
+    initializeTimeAllocationFormListeners();
 
     // Only load data if user is authenticated (check if user info exists)
     const userInfo = document.getElementById('user-info');

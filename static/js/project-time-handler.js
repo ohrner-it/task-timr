@@ -152,9 +152,21 @@ function updateTimeAllocationPreview() {
 }
 
 /**
- * Setup event listeners for the time allocation form
+ * Initialize static event listeners for the time allocation form (called once on page load)
  */
-function setupTimeAllocationFormListeners() {
+function initializeTimeAllocationFormListeners() {
+    // Handle "Save and Add New" button
+    const saveAndAddNewBtn = document.getElementById("save-and-add-new-btn");
+    if (saveAndAddNewBtn) {
+        saveAndAddNewBtn.addEventListener("click", function (event) {
+            const form = document.getElementById("time-allocation-form");
+            if (form) {
+                form.dataset.saveAndAddNew = "true";
+                saveTimeAllocation(event);
+            }
+        });
+    }
+
     // Update save button state when task selection changes
     const taskIdInput = document.getElementById("selected-task-id");
     if (taskIdInput) {
@@ -172,8 +184,6 @@ function setupTimeAllocationFormListeners() {
     const durationInput = document.getElementById("time-allocation-duration");
     if (durationInput) {
         let parseTimeout;
-
-        // Watch for ANY value changes to the duration input (typing, programmatic, etc.)
         let lastValue = durationInput.value;
         
         function checkForValueChange() {
@@ -185,53 +195,41 @@ function setupTimeAllocationFormListeners() {
             }
         }
         
-        // Use multiple approaches to catch all possible value changes
         durationInput.addEventListener('input', checkForValueChange);
         durationInput.addEventListener('change', checkForValueChange);
-        durationInput.addEventListener('propertychange', checkForValueChange); // For older browsers
+        durationInput.addEventListener('propertychange', checkForValueChange);
         
-        // Also use MutationObserver for attribute changes
         const durationObserver = new MutationObserver(checkForValueChange);
         durationObserver.observe(durationInput, {
             attributes: true,
             attributeFilter: ['value']
         });
         
-        // Periodically check for changes (as a last resort)
         setInterval(checkForValueChange, 100);
 
-        // The comprehensive value change detection above handles all updates
-        // This listener now only handles input-specific logic (clearing timeouts)
         durationInput.addEventListener("input", function (e) {
-            // Clear previous timeout for parsing
             if (parseTimeout) {
                 clearTimeout(parseTimeout);
             }
         });
 
-        // Also handle blur event for immediate parsing when user leaves the field
         durationInput.addEventListener("blur", function (e) {
             const currentValue = e.target.value.trim();
 
-            // Clear any pending timeout
             if (parseTimeout) {
                 clearTimeout(parseTimeout);
                 parseTimeout = null;
             }
 
-            // Parse if it contains letters
             if (/[a-zA-Z]/.test(currentValue)) {
                 const minutes = parseJiraDuration(currentValue);
                 if (!isNaN(minutes)) {
                     e.target.value = minutes;
-                    // Clear any previous error styling
                     e.target.classList.remove("is-invalid");
                     updateSaveButtonState();
                     updateTimeAllocationPreview();
-                    // Also trigger duration button update after parsing
                     document.dispatchEvent(new CustomEvent('updateDurationButtons'));
                 } else {
-                    // Show error for invalid format
                     e.target.classList.add("is-invalid");
                     const modalAlerts = document.querySelector("#time-allocation-modal .modal-alerts");
                     if (modalAlerts) {
@@ -244,22 +242,7 @@ function setupTimeAllocationFormListeners() {
                     }
                 }
             } else {
-                // Clear error styling for pure numeric input
                 e.target.classList.remove("is-invalid");
-            }
-        });
-    }
-
-    // Handle "Save and Add New" button
-    const saveAndAddNewBtn = document.getElementById("save-and-add-new-btn");
-    if (saveAndAddNewBtn) {
-        saveAndAddNewBtn.addEventListener("click", function (event) {
-            // Mark as "save and add new" and call the function directly
-            const form = document.getElementById("time-allocation-form");
-            if (form) {
-                form.dataset.saveAndAddNew = "true";
-                // Call saveTimeAllocation directly instead of dispatching synthetic event
-                saveTimeAllocation(event);
             }
         });
     }
@@ -267,10 +250,6 @@ function setupTimeAllocationFormListeners() {
     // Set up event listeners for cross-file communication
     document.addEventListener('updateSaveButton', updateSaveButtonState);
     document.addEventListener('updatePreview', updateTimeAllocationPreview);
-    
-    // Initial button state and preview update
-    updateSaveButtonState();
-    updateTimeAllocationPreview();
 }
 
 /**
@@ -1261,11 +1240,11 @@ function openTimeAllocationForm(
     if (modal) {
         modal.show();
 
-        // Setup event listeners for the form elements
-        setupTimeAllocationFormListeners();
+        // Update button states and preview for current modal state
+        updateSaveButtonState();
+        updateTimeAllocationPreview();
         
         // Update duration button states to highlight the correct initial button
-        // Use a small delay to ensure the modal is fully rendered
         setTimeout(() => {
             document.dispatchEvent(new CustomEvent('updateDurationButtons'));
         }, 200);
@@ -1303,7 +1282,8 @@ export {
     deleteTimeAllocation,
     fetchUIProjectTimes,
     renderUIProjectTimes,
-    renderTimeAllocationProgress
+    renderTimeAllocationProgress,
+    initializeTimeAllocationFormListeners
 };
 
 // Keep minimal global exports for HTML onclick handlers that still need them
