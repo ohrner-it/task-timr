@@ -57,21 +57,42 @@ These guidelines apply to the entire repository.
      to exist?" and "Is this data already available elsewhere?"
    - **Challenge existing implementations**: If modifying existing code, critically examine 
      whether the current approach is architecturally sound or needs redesign.
+   - **Discover existing mechanisms first**: Before creating new functionality, systematically search for existing functions, patterns, and mechanisms that could handle the requirement. Ask "What already exists that could solve this?"
+   - **Evaluate multiple approaches**: Consider at least 2-3 different implementation strategies, including leveraging existing code, before selecting an approach.
+   - **Simplification check**: Actively ask "Can this be simpler?" and "What's the minimal change needed?" Prefer extending existing patterns over creating new ones.
    - **Analyze data flow**: Trace where required data originates and how it flows through 
      the system. Avoid duplicating data or creating unnecessary transformations.
    - **Identify anti-patterns**: Look for GUI parsing, redundant calculations, DOM mining, 
      or format dancing. Plan to eliminate these completely, not improve them.
+   - **Red flag recognition**: Watch for warning signs of unnecessary complexity such as:
+     - Special-case handling when general mechanisms exist
+     - Multiple code paths for similar functionality
+     - New abstractions that duplicate existing patterns
+     - Complex fallback logic when simpler approaches are available
    - **Design the target architecture**: Plan a clean solution that works with structured 
      data from its source, follows separation of concerns, and avoids problematic patterns.
    - **Validate approach**: Ensure the planned solution aligns with the project's 
      architectural principles and doesn't introduce technical debt.
 
-3. **Test Driven Development**: Write or adapt tests first, then implement the
-   desired functionality. Tests must follow the target architecture from step 2.
+3. **Architecture Decision Validation**: Before proceeding to implementation, validate your architectural decisions:
+   - **Complexity justification**: Can you clearly explain why any new complexity is necessary? If not, reconsider.
+   - **Existing mechanism check**: Have you confirmed that no existing function, pattern, or mechanism can handle this requirement?
+   - **Principle alignment**: Does your approach align with the project's key design principles (stateless, separation of concerns, etc.)?
+   - **Future maintainability**: Will this approach be easy to understand, modify, and extend?
+   - **Implementation pause point**: Stop and ask "Is there a fundamentally simpler way to achieve this?" before committing to the approach.
 
-4. **Implementation**: Implement the solution according to the plan from step 2.
+4. **Test Driven Development**: Write tests first, then implement the desired functionality:
+   - **Write failing tests first**: Tests must fail initially to prove they test the actual implementation
+   - **Test the target architecture**: Tests must follow and validate the planned architecture from step 2
+   - **No implementation before tests**: Do not write any production code until you have failing tests that define the expected behavior
+   - **Test real behavior**: Ensure tests cover actual production scenarios, not just mock interactions
 
-5. **Test Execution**: Run all tests before committing. The recommended command is:
+5. **Implementation**: Implement the solution according to the plan from steps 2-3:
+   - **Implementation checkpoints**: Regularly pause during implementation to ask "Am I adding unnecessary complexity?"
+   - **Stick to the plan**: Follow the validated architecture; if you need to deviate, return to step 2-3 for re-planning
+   - **Continuous simplification**: Look for opportunities to simplify as you implement
+
+6. **Test Execution**: Run all tests before committing. The recommended command is:
    ```bash
    ./run_all_tests.sh
    ```
@@ -82,20 +103,21 @@ These guidelines apply to the entire repository.
    - ALL tests MUST finish successfully before any modifications are allowed to
      be committed.
 
-6. **Independent Critical Review**: Use a subagent to perform an independent, constructive 
+7. **Independent Critical Review**: Use a subagent to perform an independent, constructive 
    review of all changes:
    - The subagent must critically examine both the implementation and the underlying 
-     architectural decisions from step 2.
+     architectural decisions from steps 2-3.
    - The review should validate that the solution eliminates anti-patterns completely 
      and follows sound architectural principles.
    - The subagent should question whether the implemented approach makes fundamental sense 
      and suggest improvements for overall software quality.
+   - **Simplification review**: The subagent should specifically ask "Could this be simpler?" and "Are we using existing mechanisms effectively?"
    - If the review identifies violations of guidelines, anti-patterns, or fundamental 
      architectural issues, **go back to step 2 (Planning)** and restart the process.
    - Only proceed if the review confirms the solution follows all project guidelines 
      and represents a high-quality, maintainable implementation.
 
-7. **Final Quality Check**: Before you consider a task as completed or finished, critically review all
+8. **Final Quality Check**: Before you consider a task as completed or finished, critically review all
    changes you did and verify that these follow the project's coding and testing
    guidelines and rules.
    - In particular, tests MUST test the real code. There is no such thing as "minor"
@@ -104,13 +126,14 @@ These guidelines apply to the entire repository.
    - Tests which only work on Mocks or duplicate the logic under test in their own
      implementation are meaningless and MUST be rewritten to follow the "Ten Laws
      for Unit Tests" (see below).
+   - **Final simplification check**: Ask one last time "Could any of this be simpler or use existing mechanisms better?"
    - If you find violations of the guidelines or rules laid out in here or the
      project documentation, go back and restart your work to resolve these findings.
      After you consider the issues resolved, make sure all tests really pass, and
      then critically review again. Repeat until the review does not find any
      violations of the project's coding and testing guidelines and rules any more.
 
-8. **Documentation Maintenance**: Refrain from creating new documentation files which in detail describe the
+9. **Documentation Maintenance**: Refrain from creating new documentation files which in detail describe the
    changes performed for the current task. Such documentation files serve no
    long-term purpose, clutter the documentation folder and get obsolete nearly
    immediately. See the instructions on how to update the documentation below.
@@ -125,23 +148,33 @@ Perform a constructive, critical review of the implemented changes with the goal
    - Examine whether the fundamental approach makes sense
    - Verify that anti-patterns (GUI parsing, DOM mining, redundant calculations, format dancing) have been completely eliminated
    - Check that the solution works with structured data from its source
+   - Assess if existing mechanisms were properly leveraged before creating new ones
 
 2. **Code Quality Assessment**:
    - Verify adherence to project coding guidelines and conventions
    - Check for proper separation of concerns and encapsulation
    - Ensure tests follow the "Ten Laws for Unit Tests" and test real production code
+   - Evaluate if the solution is as simple as possible while meeting requirements
 
 3. **Implementation Review**:
    - Validate that deprecated code and tests have been completely removed
    - Check for proper error handling and edge case coverage
    - Verify that changes don't introduce technical debt or workarounds
+   - Assess whether any unnecessary complexity was introduced
 
-4. **Recommendations**:
+4. **Simplification Analysis**:
+   - Ask "Could this be simpler?" for each major component
+   - Verify that existing patterns and mechanisms were used effectively
+   - Check for opportunities to reduce complexity or eliminate special cases
+   - Ensure no duplicate functionality was created
+
+5. **Recommendations**:
    - Provide specific, actionable feedback for any issues found
    - Suggest improvements for maintainability and code quality
    - If fundamental issues exist, recommend returning to the planning phase
+   - Highlight any missed opportunities for simplification
 
-Be constructively critical - the goal is to ensure high-quality, maintainable code that follows architectural best practices.
+Be constructively critical - the goal is to ensure high-quality, maintainable code that follows architectural best practices and achieves maximum simplicity.
 ```
 
 ## Commit and PR Guidelines
@@ -205,6 +238,28 @@ Before implementing any data processing logic, ask:
 4. "Will this break if the UI display format changes?"
 
 ## Development Patterns
+
+### Architectural Simplification Guidelines
+
+**Complexity Reduction Process:**
+- **Default to existing mechanisms**: Always start by exploring how existing functions, patterns, and mechanisms can handle new requirements
+- **Justify new complexity**: Any new abstraction, special case, or complex logic must be clearly justified as necessary
+- **Prefer extension over creation**: Extend existing patterns rather than creating parallel systems
+- **Eliminate special cases**: Look for opportunities to handle edge cases through general mechanisms rather than special-case code
+
+**Solution Comparison Framework:**
+1. **Identify existing mechanisms**: What functions, patterns, or systems already exist that could handle this?
+2. **Evaluate extension possibilities**: How could existing mechanisms be extended or composed to meet the requirement?
+3. **Consider minimal additions**: What's the smallest addition to existing code that would solve the problem?
+4. **Compare complexity**: For each potential solution, evaluate the total system complexity, not just local complexity
+5. **Select simplest effective solution**: Choose the approach that minimizes overall system complexity while meeting requirements
+
+**Red Flags for Unnecessary Complexity:**
+- Creating new functions when existing ones could be extended
+- Implementing special-case handling when general mechanisms exist
+- Building parallel systems instead of unifying approaches
+- Adding configuration or abstraction layers without clear necessity
+- Creating temporary or marker systems when direct approaches are available
 
 ### Testing Philosophy
 - All tests must adhere to the "Ten Laws for Unit Tests" defined in the
@@ -290,7 +345,7 @@ Before implementing any data processing logic, ask:
   Do not create workaround code for hypothetical problems in other services which
   most likely don't exist.
 - Always focus on identifying and resolving the root cause instead of adding
-  “work-around code.” Such work-around code is nearly always the wrong approach
+  "work-around code." Such work-around code is nearly always the wrong approach
   and adds unnecessary complexity and maintenance issues.
 
 ### Security Considerations
