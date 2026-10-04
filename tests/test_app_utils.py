@@ -2,11 +2,12 @@ import unittest
 import datetime
 import json
 from unittest.mock import patch, MagicMock
-from app import parse_date, parse_time, combine_datetime, format_duration, get_working_times, get_project_times
+from app import (parse_date, parse_time, combine_datetime, format_duration, get_working_times,
+                 get_project_times, project_time_consolidator)
 from config import DATE_FORMAT, TIME_FORMAT
 from timr_api import TimrApi
 from timr_utils import UIProjectTime
-from tests.utils import REALISTIC_WORKING_TIME, REALISTIC_LOGIN_RESPONSE
+from tests.utils import REALISTIC_WORKING_TIME, REALISTIC_USER
 
 class TestAppUtils(unittest.TestCase):
     """Test utilities from app.py"""
@@ -134,14 +135,15 @@ class TestApiEndpoints(unittest.TestCase):
         
         # Configure the mock timr_api instance
         mock_timr_api.get_working_times.return_value = [REALISTIC_WORKING_TIME]
-        
-        # Mock the request
-        with self.app.test_request_context('/api/working-times?date=2025-05-01'):
+
+        # Mock the request; the consolidator holds its own reference to the API client
+        with self.app.test_request_context('/api/working-times?date=2025-05-01'), \
+                patch.object(project_time_consolidator, 'timr_api', mock_timr_api):
             # Mock the session
             mock_session.get.return_value = 'test_token'
             
             # Mock the current user
-            mock_get_current_user.return_value = REALISTIC_LOGIN_RESPONSE['user']
+            mock_get_current_user.return_value = REALISTIC_USER
             
             # Call the endpoint
             result = get_working_times()
@@ -158,7 +160,7 @@ class TestApiEndpoints(unittest.TestCase):
             # And should be passed to the correct API parameters
             self.assertEqual(kwargs['start_date'], '2025-05-01T00:00:00Z')
             self.assertEqual(kwargs['end_date'], '2025-05-01T23:59:59Z')
-            self.assertEqual(kwargs['user_id'], REALISTIC_LOGIN_RESPONSE['user']['id'])
+            self.assertEqual(kwargs['user_id'], REALISTIC_USER['id'])
             
             # Verify the response is a valid JSON response
             # Flask test client returns a Response object or a tuple (response, status_code)
@@ -193,7 +195,7 @@ class TestApiEndpoints(unittest.TestCase):
             mock_session.get.return_value = 'test_token'
             
             # Mock the current user
-            mock_get_current_user.return_value = REALISTIC_LOGIN_RESPONSE['user']
+            mock_get_current_user.return_value = REALISTIC_USER
             
             # Call the endpoint
             result = get_working_times()
@@ -254,7 +256,7 @@ class TestApiEndpoints(unittest.TestCase):
         with self.app.test_request_context('/api/project-times?working_time_id=wt1'):
             # Mock the session and user
             mock_session.get.return_value = 'test_token'
-            mock_get_current_user.return_value = REALISTIC_LOGIN_RESPONSE['user']
+            mock_get_current_user.return_value = REALISTIC_USER
             
             # Call the endpoint
             result = get_project_times()

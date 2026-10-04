@@ -68,7 +68,7 @@ if [ ! -f ".env" ]; then
     cp .env.example .env
     echo "✅ Created .env from template"
     echo "⚠️  Please edit .env with your actual Timr.com credentials before running Docker"
-    echo "   Required variables: SESSION_SECRET, TIMR_COMPANY_ID, TASKLIST_TIMR_USER, TASKLIST_TIMR_PASSWORD"
+    echo "   Required variables: SESSION_SECRET, TIMR_COMPANY_ID, TIMR_OAUTH_CLIENT_ID, TIMR_OAUTH_CLIENT_SECRET, TIMR_OAUTH_REDIRECT_URI"
     exit 1
 fi
 

@@ -8,11 +8,11 @@ from unittest.mock import Mock, patch, MagicMock
 import json
 import datetime
 from flask import Flask
-from app import app
+from app import app, project_time_consolidator
 from timr_api import TimrApiError
 from tests.utils import (
-    REALISTIC_LOGIN_RESPONSE, REALISTIC_WORKING_TIME, REALISTIC_WORKING_TIME_TYPE,
-    REALISTIC_TASK, create_working_time_variant, create_user_variant
+    REALISTIC_WORKING_TIME, REALISTIC_WORKING_TIME_TYPE,
+    REALISTIC_TASK, create_working_time_variant
 )
 
 
@@ -34,17 +34,18 @@ class TestAppEndpointsComprehensive(unittest.TestCase):
         self.session_patch = patch('flask.session')
         self.mock_session = self.session_patch.start()
         
-        # Mock TimrApi instances
+        # Mock TimrApi instance, also for the consolidator which holds its own reference
         self.timr_api_patch = patch('app.timr_api')
-        self.timr_api_elevated_patch = patch('app.timr_api_elevated')
         self.mock_timr_api = self.timr_api_patch.start()
-        self.mock_timr_api_elevated = self.timr_api_elevated_patch.start()
+        self.consolidator_api_patch = patch.object(project_time_consolidator, 'timr_api',
+                                                   self.mock_timr_api)
+        self.consolidator_api_patch.start()
 
     def tearDown(self):
         """Clean up after each test"""
         self.session_patch.stop()
         self.timr_api_patch.stop()
-        self.timr_api_elevated_patch.stop()
+        self.consolidator_api_patch.stop()
         self.request_context.pop()
         self.app_context.pop()
 
@@ -70,60 +71,6 @@ class TestAppEndpointsComprehensive(unittest.TestCase):
         
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'<!DOCTYPE html>', response.data)
-
-    # Test login endpoint (POST only - no GET route exists)
-    def test_login_get_method_not_allowed(self):
-        """Test that GET /login is not allowed (only POST exists)"""
-        response = self.app.get('/login')
-        
-        self.assertEqual(response.status_code, 405)  # Method Not Allowed
-
-    def test_login_post_success(self):
-        """Test successful login POST request"""
-        # Mock successful login with realistic response structure
-        self.mock_timr_api.login.return_value = REALISTIC_LOGIN_RESPONSE
-        
-        response = self.app.post('/login', data={
-            'username': 'testuser',
-            'password': 'testpass'
-        })
-        
-        self.assertEqual(response.status_code, 302)
-        self.mock_timr_api.login.assert_called_once_with('testuser', 'testpass')
-
-    def test_login_post_failure(self):
-        """Test failed login POST request"""
-        # Mock failed login
-        self.mock_timr_api.login.side_effect = TimrApiError("Invalid credentials")
-        
-        response = self.app.post('/login', data={
-            'username': 'baduser',
-            'password': 'badpass'
-        })
-        
-        # Production code redirects with flash message, not renders page with error
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.location.endswith('/'))  # Redirects to index
-
-    def test_login_post_missing_credentials(self):
-        """Test login POST with missing credentials"""
-        response = self.app.post('/login', data={})
-        
-        # Production code redirects with flash message for missing credentials
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.location.endswith('/'))  # Redirects to index
-
-    # Test logout endpoint
-    def test_logout_clears_session(self):
-        """Test that logout clears the session"""
-        # Mock session with user data
-        session_data = {'token': 'test-token', 'user': {'id': 'user1'}}
-        self.mock_session.get.side_effect = lambda key, default=None: session_data.get(key, default)
-        
-        response = self.app.get('/logout')
-        
-        self.assertEqual(response.status_code, 302)
-        self.mock_timr_api.logout.assert_called_once()
 
     # Test working times API endpoints
     def test_get_working_times_requires_authentication(self):
@@ -186,13 +133,14 @@ class TestAppEndpointsComprehensive(unittest.TestCase):
         }
         self.mock_timr_api.create_working_time.return_value = created_wt
         
-        response = self.app.post('/api/working-times', 
+        response = self.app.post('/api/working-times',
                                 json={
                                     'start': '2025-04-01T09:00:00Z',
                                     'end': '2025-04-01T17:00:00Z',
-                                    'pause_duration': 0
+                                    'pause_duration': 0,
+                                    'working_time_type_id': 'type-1'
                                 })
-        
+
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)
         # Production code returns {'working_time': working_time}
@@ -211,6 +159,22 @@ class TestAppEndpointsComprehensive(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.data)
         self.assertIn('error', data)
+
+    def test_create_working_time_without_working_time_type_is_rejected(self):
+        """Test that the working time type required by the Timr API is validated upfront"""
+        with self.app.session_transaction() as sess:
+            sess['token'] = 'test-token'
+            sess['user'] = {'id': 'user1'}
+
+        response = self.app.post('/api/working-times',
+                                 json={
+                                     'start': '2025-04-01T09:00:00Z',
+                                     'end': '2025-04-01T17:00:00Z'
+                                 })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(json.loads(response.data)['error'], 'Working time type is required')
+        self.mock_timr_api.create_working_time.assert_not_called()
 
     def test_create_working_time_invalid_date_format(self):
         """Test create working time with invalid date format"""
@@ -317,7 +281,7 @@ class TestAppEndpointsComprehensive(unittest.TestCase):
         search_results = [
             {'id': 'task1', 'name': 'Test Task 1'}
         ]
-        self.mock_timr_api_elevated.get_tasks.return_value = search_results
+        self.mock_timr_api.get_bookable_tasks.return_value = search_results
         
         response = self.app.get('/api/tasks/search?q=test')
         
@@ -351,7 +315,7 @@ class TestAppEndpointsComprehensive(unittest.TestCase):
             sess['user'] = {'id': 'user1'}
         
         # Mock API error
-        self.mock_timr_api_elevated.get_tasks.side_effect = Exception("Search failed")
+        self.mock_timr_api.get_bookable_tasks.side_effect = Exception("Search failed")
         
         response = self.app.get('/api/tasks/search?q=test')
         

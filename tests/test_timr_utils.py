@@ -107,13 +107,6 @@ class TestProjectTimeConsolidator(unittest.TestCase):
         """Set up test fixtures"""
         self.mock_timr_api = Mock()
         self.consolidator = ProjectTimeConsolidator(self.mock_timr_api)
-    
-    def test_initialization(self):
-        """Test ProjectTimeConsolidator initialization"""
-        mock_api = Mock()
-        consolidator = ProjectTimeConsolidator(mock_api)
-        
-        self.assertEqual(consolidator.timr_api, mock_api)
 
         # Create a sample working time
         self.working_time = {
@@ -155,6 +148,13 @@ class TestProjectTimeConsolidator(unittest.TestCase):
 
         # Configure mock to return sample project times
         self.mock_timr_api._get_project_times_in_work_time.return_value = self.project_times
+
+    def test_initialization(self):
+        """Test ProjectTimeConsolidator initialization"""
+        mock_api = Mock()
+        consolidator = ProjectTimeConsolidator(mock_api)
+
+        self.assertEqual(consolidator.timr_api, mock_api)
 
     def test_consolidate_project_times_basic(self):
         """Test basic consolidation of project times"""

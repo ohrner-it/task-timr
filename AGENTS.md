@@ -30,7 +30,7 @@ These guidelines apply to the entire repository.
   - [Developer Guide](doc/README.Developer%20Guide.md)
   - [Testing Guide](doc/README.Testing%20Guide.md)
   - [User Guide](doc/README.User%20Guide.md)
-  - [Timr API Specification](doc/timr_api_0_2_11_openapi_v3.md)
+  - [Timr API v1 Specification](doc/timr_api_v1_openapi.yaml) (current version: https://developer.timr.com/openapi.yaml)
   
   These files may evolve, so always consult them for up-to-date guidelines.
 
@@ -192,6 +192,7 @@ Be constructively critical - the goal is to ensure high-quality, maintainable co
 **Backend (Python Flask)**
 - `app.py`: Main Flask application with routes and UI logic
 - `timr_api.py`: TimrApi class - handles all Timr.com API communication with automatic pagination
+- `timr_oauth.py`: TimrOAuthClient class - OAuth2 login (authorization code flow with PKCE), token refresh and revocation
 - `timr_utils.py`: ProjectTimeConsolidator class - converts between Timr.com's time-slot model and Task Timr's task-duration model
 - `config.py`: Configuration management (environment variables, constants)
 
@@ -287,9 +288,10 @@ Before implementing any data processing logic, ask:
 - Avoid redundant test classes; each test class should have a clear, unique purpose.
 
 ### Environment Configuration
-- `.env` file contains sensitive credentials (Timr.com API access)
+- `.env` file contains sensitive credentials (Timr.com OAuth client secrets)
 - `config.py` loads environment variables with fallbacks
-- Environment variables: `TIMR_COMPANY_ID`, `TASKLIST_TIMR_USER`, `TASKLIST_TIMR_PASSWORD`, `SESSION_SECRET`
+- Environment variables: `TIMR_COMPANY_ID`, `TIMR_OAUTH_CLIENT_ID`, `TIMR_OAUTH_CLIENT_SECRET`, `TIMR_OAUTH_REDIRECT_URI`, `SESSION_SECRET`
+- Developer tools and integration tests only: `TIMR_SERVICE_CLIENT_ID`, `TIMR_SERVICE_CLIENT_SECRET`, `TIMR_TEST_USER_ID`
 
 ### Frontend Module Structure
 - ES6 modules with explicit imports/exports

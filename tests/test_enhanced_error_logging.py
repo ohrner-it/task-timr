@@ -51,8 +51,8 @@ class TestEnhancedRequestLogging(unittest.TestCase):
         # Create enhanced request data structure as used in timr_api.py
         enhanced_request_data = {
             "method": "POST",
-            "url": "https://api.timr.com/v0.2/project-times",
-            "params": {"limit": 100, "user": "test-user"},
+            "url": "https://api.timr.com/v1/project-times",
+            "params": {"limit": 100, "users": "test-user"},
             "payload": {
                 "task_id": "task-123",
                 "start": "2025-06-17T10:00:00+00:00",
@@ -83,9 +83,9 @@ class TestEnhancedRequestLogging(unittest.TestCase):
         # Verify enhanced request details are logged
         self.assertIn("Request Details:", log_contents)
         self.assertIn("method=POST", log_contents)
-        self.assertIn("url=https://api.timr.com/v0.2/project-times", log_contents)
+        self.assertIn("url=https://api.timr.com/v1/project-times", log_contents)
         self.assertIn('"limit": 100', log_contents)
-        self.assertIn('"user": "test-user"', log_contents)
+        self.assertIn('"users": "test-user"', log_contents)
         self.assertIn('"task_id": "task-123"', log_contents)
         self.assertIn('"start": "2025-06-17T10:00:00+00:00"', log_contents)
         
@@ -105,7 +105,7 @@ class TestEnhancedRequestLogging(unittest.TestCase):
         """Test that nested sensitive data is properly sanitized."""
         nested_request_data = {
             "method": "POST",
-            "url": "https://api.timr.com/v0.2/login",
+            "url": "https://system.timr.com/id/oauth2/token",
             "params": None,
             "payload": {
                 "credentials": {
@@ -126,10 +126,10 @@ class TestEnhancedRequestLogging(unittest.TestCase):
         error = Exception("Authentication failed")
         self.error_handler.log_api_error(
             error=error,
-            endpoint="/login",
+            endpoint="/oauth2/token",
             status_code=401,
             request_data=nested_request_data,
-            operation="POST /login"
+            operation="POST /oauth2/token"
         )
         
         log_contents = self.log_capture_string.getvalue()
@@ -152,7 +152,7 @@ class TestEnhancedRequestLogging(unittest.TestCase):
         """Test that enhanced request details are logged at appropriate levels."""
         enhanced_request_data = {
             "method": "DELETE",
-            "url": "https://api.timr.com/v0.2/project-times/123",
+            "url": "https://api.timr.com/v1/project-times/123",
             "params": None,
             "payload": None
         }
@@ -195,7 +195,7 @@ class TestEnhancedRequestLogging(unittest.TestCase):
         """Test detailed response logging for different response types."""
         enhanced_request_data = {
             "method": "GET",
-            "url": "https://api.timr.com/v0.2/tasks",
+            "url": "https://api.timr.com/v1/tasks",
             "params": {"active": True},
             "payload": None
         }
@@ -341,7 +341,7 @@ class TestTimrApiEnhancedErrorLogging(unittest.TestCase):
         # Verify enhanced request data is logged
         self.assertIn("Request Details:", log_contents)
         self.assertIn("method=POST", log_contents)
-        self.assertIn("url=https://api.timr.com/v0.2/project-times", log_contents)
+        self.assertIn("url=https://api.timr.com/v1/project-times", log_contents)
         self.assertIn('"validate": true', log_contents)  # JSON format for params
         self.assertIn('"task_id": "task-789"', log_contents)  # JSON format for payload
         
@@ -367,7 +367,7 @@ class TestTimrApiEnhancedErrorLogging(unittest.TestCase):
         
         # Verify enhanced request data is logged even for network errors
         self.assertIn("method=GET", log_contents)
-        self.assertIn("url=https://api.timr.com/v0.2/tasks", log_contents)
+        self.assertIn("url=https://api.timr.com/v1/tasks", log_contents)
         self.assertIn('"active": true', log_contents)
         self.assertIn('"search": "test task"', log_contents)
     
@@ -390,7 +390,7 @@ class TestTimrApiEnhancedErrorLogging(unittest.TestCase):
         
         # Verify enhanced request data is logged for timeouts
         self.assertIn("method=PATCH", log_contents)
-        self.assertIn("url=https://api.timr.com/v0.2/working-times/wt-123", log_contents)
+        self.assertIn("url=https://api.timr.com/v1/working-times/wt-123", log_contents)
         self.assertIn('"end": "2025-06-17T17:00:00+00:00"', log_contents)
         
         # Verify sensitive data is masked

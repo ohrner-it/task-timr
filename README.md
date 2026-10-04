@@ -51,7 +51,7 @@ The application uses a layered architecture:
 
 2. **Backend API**: Python Flask application
    - Provides simplified REST API for the frontend
-   - Handles authentication with Timr.com
+   - Handles the user login via OAuth2 with Timr.com (Timr.com API v1)
    - Translates between UI model and Timr.com data model
 
 3. **Data Models**:

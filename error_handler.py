@@ -74,7 +74,6 @@ class EnhancedErrorHandler:
                 503: "The Timr service is currently under maintenance. Please try again later."
             },
             ErrorCategory.TIMR_BUSINESS_RULE: {
-                "frozen_time": "This working time is frozen and cannot be modified.",
                 "non_bookable_task": "This task is not bookable. Please select a different task.",
                 "overlapping_times": "This time entry overlaps with existing entries.",
                 "ongoing_modification": "Cannot modify ongoing working times. Please stop the timer first.",
@@ -93,9 +92,7 @@ class EnhancedErrorHandler:
                 "dns_error": "Cannot connect to the Timr service. Please check your network settings."
             },
             ErrorCategory.AUTHENTICATION: {
-                "invalid_credentials": "Invalid username or password.",
-                "token_expired": "Your session has expired. Please log in again.",
-                "session_invalid": "Your session is invalid. Please log in again."
+                "session_invalid": "Your Timr.com session is invalid or has expired. Please log in again."
             }
         }
     
@@ -274,7 +271,8 @@ class EnhancedErrorHandler:
             task_id: Task ID for context
             
         Returns:
-            str: User-friendly error message
+            str: User-friendly error message for the rule type, or the details
+                 if no message is defined for the rule type
         """
         context = ErrorContext(
             category=ErrorCategory.TIMR_BUSINESS_RULE,
@@ -284,9 +282,9 @@ class EnhancedErrorHandler:
             working_time_id=working_time_id,
             task_id=task_id
         )
-        
-        error = ValueError(details)
-        return self.log_error(error, context)
+
+        self.log_error(ValueError(details), context)
+        return self.user_messages[ErrorCategory.TIMR_BUSINESS_RULE].get(rule_type, details)
     
     def log_validation_error(self, field: str, value: Any, reason: str,
                            user_id: Optional[str] = None) -> str:
@@ -346,18 +344,6 @@ class EnhancedErrorHandler:
             if message:
                 return message
         
-        # For business rule violations, use specific rule type
-        if context.category == ErrorCategory.TIMR_BUSINESS_RULE:
-            error_str = str(error).lower()
-            if "frozen" in error_str:
-                return category_messages.get("frozen_time", str(error))
-            elif "not bookable" in error_str:
-                return category_messages.get("non_bookable_task", str(error))
-            elif "overlap" in error_str:
-                return category_messages.get("overlapping_times", str(error))
-            elif "ongoing" in error_str:
-                return category_messages.get("ongoing_modification", str(error))
-        
         # For validation errors, use specific validation type
         if context.category == ErrorCategory.DATA_VALIDATION:
             error_str = str(error).lower()
@@ -378,7 +364,7 @@ class EnhancedErrorHandler:
         
         # For authentication errors
         if context.category == ErrorCategory.AUTHENTICATION:
-            return category_messages.get("invalid_credentials", "Authentication failed. Please log in again.")
+            return category_messages["session_invalid"]
         
         # Default fallback
         return "An unexpected error occurred. Please try again or contact support if the problem persists."

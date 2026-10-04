@@ -72,23 +72,32 @@ class TestEnhancedErrorHandler(unittest.TestCase):
                 self.assertIn(expected_category.value.upper(), log_contents)
                 self.assertIn("test_user_123", log_contents)
                 self.assertIn("/test-endpoint", log_contents)
-                
+
                 # Clear log for next test
                 self.log_capture_string.truncate(0)
                 self.log_capture_string.seek(0)
-    
+
+    def test_unauthorized_api_error_asks_to_log_in_again(self):
+        """A 401 from the API means the OAuth access token was rejected."""
+        user_message = self.error_handler.log_api_error(
+            error=Exception("Unauthorized"),
+            endpoint="/working-times",
+            status_code=401)
+
+        self.assertEqual(user_message, "Your Timr.com session is invalid or has expired. Please log in again.")
+
     def test_log_business_rule_violation(self):
         """Test business rule violation logging."""
         user_message = self.error_handler.log_business_rule_violation(
-            rule_type="frozen_time",
-            details="Working time is frozen",
+            rule_type="non_bookable_task",
+            details="Task task_456 cannot be used",
             user_id="test_user_123",
             working_time_id="wt_123",
             task_id="task_456"
         )
-        
-        # Check user message
-        self.assertIn("frozen", user_message.lower())
+
+        # User message is determined by the rule type, not by the details text
+        self.assertEqual(user_message, "This task is not bookable. Please select a different task.")
         
         # Check log contents
         log_contents = self.log_capture_string.getvalue()
@@ -97,6 +106,14 @@ class TestEnhancedErrorHandler(unittest.TestCase):
         self.assertIn("wt_123", log_contents)
         self.assertIn("task_456", log_contents)
     
+    def test_log_business_rule_violation_of_unknown_rule_returns_details(self):
+        """Test that rules without a predefined message report their details."""
+        user_message = self.error_handler.log_business_rule_violation(
+            rule_type="unknown_rule",
+            details="Something specific went wrong")
+
+        self.assertEqual(user_message, "Something specific went wrong")
+
     def test_log_validation_error(self):
         """Test data validation error logging."""
         user_message = self.error_handler.log_validation_error(
@@ -243,46 +260,6 @@ class TestTimrApiErrorHandling(unittest.TestCase):
         api_error = context.exception
         user_message = api_error.get_user_message()
         self.assertTrue("timeout" in user_message.lower() or "timed out" in user_message.lower())
-    
-    @patch('timr_api.TimrApi._request')
-    def test_business_rule_detection_non_bookable_task(self, mock_request):
-        """Test detection of non-bookable task business rule."""
-        # Mock API error for non-bookable task
-        api_error = TimrApiError("Task is not bookable", 400, {"error": "Task is not bookable"})
-        mock_request.side_effect = api_error
-        
-        # Test create_project_time with non-bookable task
-        with self.assertRaises(TimrApiError) as context:
-            self.timr_api.create_project_time(
-                task_id="non_bookable_task",
-                start="2025-01-01T09:00:00Z",
-                end="2025-01-01T10:00:00Z"
-            )
-        
-        # Check that the error message is enhanced for business rule
-        enhanced_error = context.exception
-        user_message = enhanced_error.get_user_message()
-        self.assertIn("bookable", user_message.lower())
-    
-    @patch('timr_api.TimrApi._request')
-    def test_business_rule_detection_frozen_time(self, mock_request):
-        """Test detection of frozen time business rule."""
-        # Mock API error for frozen time
-        api_error = TimrApiError("Working time is frozen", 409, {"error": "Working time is frozen"})
-        mock_request.side_effect = api_error
-        
-        # Test create_project_time with frozen time
-        with self.assertRaises(TimrApiError) as context:
-            self.timr_api.create_project_time(
-                task_id="test_task",
-                start="2025-01-01T09:00:00Z",
-                end="2025-01-01T10:00:00Z"
-            )
-        
-        # Check that the error message is enhanced for business rule
-        enhanced_error = context.exception
-        user_message = enhanced_error.get_user_message()
-        self.assertIn("frozen", user_message.lower())
 
 
 class TestAppErrorHandling(unittest.TestCase):

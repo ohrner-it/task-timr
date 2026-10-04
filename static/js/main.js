@@ -1008,9 +1008,9 @@ document.addEventListener("DOMContentLoaded", function () {
                     <h4>Login Required</h4>
                     <p class="text-muted mb-4">Please log in to your Timr account to view and manage working times.</p>
                     <div class="d-flex justify-content-center gap-2">
-                        <button class="btn btn-warning" onclick="document.querySelector('#username').focus()">
+                        <a class="btn btn-warning" href="/login">
                             <i class="bi bi-box-arrow-in-right me-1"></i> Go to Login
-                        </button>
+                        </a>
                         <button class="btn btn-outline-secondary" onclick="location.reload()">
                             <i class="bi bi-arrow-clockwise me-1"></i> Refresh
                         </button>

@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch, MagicMock
 import json
 from app import app
 from timr_utils import UIProjectTime, ProjectTimeConsolidator
-from tests.utils import REALISTIC_LOGIN_RESPONSE
+from tests.utils import REALISTIC_USER
 
 
 class TestSortingFunctionality(unittest.TestCase):
@@ -26,25 +26,24 @@ class TestSortingFunctionality(unittest.TestCase):
         
         # Configure session.get to return realistic user data
         self.mock_session.get.side_effect = lambda key, default=None: {
-            'token': REALISTIC_LOGIN_RESPONSE['token'],
-            'user': REALISTIC_LOGIN_RESPONSE['user']
+            'token': 'test-access-token',
+            'user': REALISTIC_USER
         }.get(key, default)
-        
+
         # Mock the get_current_user function
         self.get_current_user_patch = patch('app.get_current_user')
         self.mock_get_current_user = self.get_current_user_patch.start()
-        self.mock_get_current_user.return_value = REALISTIC_LOGIN_RESPONSE['user']
+        self.mock_get_current_user.return_value = REALISTIC_USER
 
-        # Mock the elevated TimrApi for task search
-        self.timr_api_elevated_patch = patch('app.timr_api_elevated')
-        self.mock_timr_api_elevated = self.timr_api_elevated_patch.start()
-        self.mock_timr_api_elevated.is_authenticated.return_value = True
+        # Mock the TimrApi client used for task search
+        self.timr_api_patch = patch('app.timr_api')
+        self.mock_timr_api = self.timr_api_patch.start()
 
     def tearDown(self):
         """Clean up after each test method."""
         self.session_patch.stop()
         self.get_current_user_patch.stop()
-        self.timr_api_elevated_patch.stop()
+        self.timr_api_patch.stop()
         self.request_context.pop()
         self.app_context.pop()
 
@@ -52,12 +51,12 @@ class TestSortingFunctionality(unittest.TestCase):
         """Test that task search results are sorted by name ascending, then ID ascending."""
         # Arrange: Mock task data in mixed order
         mock_tasks = [
-            {'id': 'task3', 'name': 'Zulu Task', 'title': 'Zulu Task'},
-            {'id': 'task1', 'name': 'Alpha Task', 'title': 'Alpha Task'},
-            {'id': 'task5', 'name': 'Beta Task', 'title': 'Beta Task'},
-            {'id': 'task2', 'name': 'Alpha Task', 'title': 'Alpha Task'},  # Same name, different ID
+            {'id': 'task3', 'name': 'Zulu Task'},
+            {'id': 'task1', 'name': 'Alpha Task'},
+            {'id': 'task5', 'name': 'Beta Task'},
+            {'id': 'task2', 'name': 'Alpha Task'},  # Same name, different ID
         ]
-        self.mock_timr_api_elevated.get_tasks.return_value = mock_tasks
+        self.mock_timr_api.get_bookable_tasks.return_value = mock_tasks
 
         # Act: Make request to search endpoint
         response = self.app.get('/api/tasks/search?q=task')
@@ -84,7 +83,7 @@ class TestSortingFunctionality(unittest.TestCase):
             {'id': 'task1', 'name': ''},  # Empty name
             {'id': 'task2'},  # Missing name field
         ]
-        self.mock_timr_api_elevated.get_tasks.return_value = mock_tasks
+        self.mock_timr_api.get_bookable_tasks.return_value = mock_tasks
 
         # Act: Make request to search endpoint
         response = self.app.get('/api/tasks/search?q=task')
@@ -102,33 +101,6 @@ class TestSortingFunctionality(unittest.TestCase):
         self.assertEqual(tasks[1]['id'], 'task2')  # Missing name
         self.assertEqual(tasks[2]['id'], 'task3')  # "Real Task"
 
-    def test_task_search_results_sorted_with_title_fallback(self):
-        """Test task search sorting when using title field as name fallback."""
-        # Arrange: Mock task data with title instead of name
-        mock_tasks = [
-            {'id': 'task2', 'title': 'Beta Task'},
-            {'id': 'task1', 'title': 'Alpha Task'},
-            {'id': 'task3', 'title': 'Gamma Task'},
-        ]
-        self.mock_timr_api_elevated.get_tasks.return_value = mock_tasks
-
-        # Act: Make request to search endpoint
-        response = self.app.get('/api/tasks/search?q=task')
-        
-        # Assert: Response should be successful
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.data)
-        
-        # Verify tasks are sorted correctly and name field is populated from title
-        tasks = data['tasks']
-        self.assertEqual(len(tasks), 3)
-        
-        # Should be sorted by name (derived from title) ascending
-        self.assertEqual(tasks[0]['id'], 'task1')  # "Alpha Task"
-        self.assertEqual(tasks[0]['name'], 'Alpha Task')  # Name should be populated from title
-        self.assertEqual(tasks[1]['id'], 'task2')  # "Beta Task"
-        self.assertEqual(tasks[2]['id'], 'task3')  # "Gamma Task"
-
     def test_task_search_minimum_length_requirement(self):
         """Test that task search returns empty results for queries shorter than 3 characters."""
         # Act: Make request with short search term
@@ -140,12 +112,12 @@ class TestSortingFunctionality(unittest.TestCase):
         self.assertEqual(data['tasks'], [])
         
         # Verify API was not called
-        self.mock_timr_api_elevated.get_tasks.assert_not_called()
+        self.mock_timr_api.get_bookable_tasks.assert_not_called()
 
     def test_task_search_handles_api_errors(self):
         """Test that task search handles API errors gracefully."""
         # Arrange: Mock API to raise an exception
-        self.mock_timr_api_elevated.get_tasks.side_effect = Exception("API Error")
+        self.mock_timr_api.get_bookable_tasks.side_effect = Exception("API Error")
 
         # Act: Make request to search endpoint
         response = self.app.get('/api/tasks/search?q=test')

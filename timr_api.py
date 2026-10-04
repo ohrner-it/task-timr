@@ -3,11 +3,14 @@ import json
 import datetime
 import pytz
 import logging
-from config import API_BASE_URL, COMPANY_ID
+from config import API_BASE_URL, REQUEST_TIMEOUT_SECONDS
 from datetime import timedelta
 from error_handler import timr_api_error_handler, ErrorCategory, ErrorSeverity, ErrorContext
 
 logger = logging.getLogger(__name__)
+
+# RFC 9457 problem type returned when booking a project time on a non-bookable task
+PROBLEM_TYPE_TASK_NOT_BOOKABLE = "https://errors.timr.com/validation/task-not-bookable"
 
 
 def _calculate_ongoing_working_time_end_for_api(working_time, work_start):
@@ -29,13 +32,37 @@ def _calculate_ongoing_working_time_end_for_api(working_time, work_start):
         return datetime.datetime.now(pytz.UTC)
 
 
+def _format_problem_message(problem):
+    """
+    Build an error message from an RFC 9457 problem details response.
+
+    Args:
+        problem (dict): Problem details with 'detail'/'title' and optional field 'errors'
+
+    Returns:
+        str: Message including field-level validation details, or None if not available
+    """
+    message = problem.get("detail") or problem.get("title")
+    field_errors = []
+    for error in problem.get("errors") or []:
+        if error.get("field"):
+            field_errors.append(f"{error['field']}: {error.get('detail', '')}")
+        else:
+            field_errors.append(error.get("detail", ""))
+    if message and field_errors:
+        return f"{message} ({'; '.join(field_errors)})"
+    return message
+
+
 class TimrApiError(Exception):
     """Exception raised for errors with the Timr API."""
 
-    def __init__(self, message, status_code=None, response=None):
+    def __init__(self, message, status_code=None, response=None, problem_type=None):
         self.message = message
         self.status_code = status_code
         self.response = response
+        # RFC 9457 problem type URI identifying the error category, if provided by the API
+        self.problem_type = problem_type
         self.technical_message = message  # Will be overridden if different
         super().__init__(self.message)
     
@@ -52,9 +79,11 @@ class TimrApi:
     """
     Python client for Timr.com API.
 
-    This client provides methods to interact with the Timr.com API for authentication,
-    working times, project times, and tasks. All list-based API endpoints automatically
-    handle pagination transparently, so calling methods like get_tasks() will retrieve
+    This client provides methods to interact with the Timr.com API for users,
+    working times, project times, and tasks. Requests are authorized with an OAuth2
+    access token assigned to `token`; `user` is the Timr user the client acts for
+    (see timr_oauth.py for obtaining tokens). All list-based API endpoints automatically
+    handle pagination transparently, so calling methods like get_bookable_tasks() will retrieve
     all available data regardless of API pagination limits.
 
     Key Features:
@@ -64,21 +93,12 @@ class TimrApi:
     - Comprehensive error handling and logging
     """
 
-    def __init__(self, company_id=COMPANY_ID):
-        """
-        Initialize the TimrApi client.
-
-        Args:
-            company_id (str): The company ID for Timr.com. Defaults to value from config.
-        """
-        self.company_id = company_id
+    def __init__(self):
+        """Initialize the TimrApi client."""
         self.base_url = API_BASE_URL
         self.token = None
-        self.token_expiry = None
         self.user = None
         self.session = requests.Session()
-        # Cache for parent task data during a single get_tasks operation
-        self._parent_task_cache = {}
 
     def _request(self, method, endpoint, data=None, params=None, headers=None):
         """
@@ -120,7 +140,8 @@ class TimrApi:
                 url=url,
                 data=json.dumps(data) if data else None,
                 params=params,
-                headers=headers)
+                headers=headers,
+                timeout=REQUEST_TIMEOUT_SECONDS)
 
             logger.debug(f"Response status: {response.status_code}")
 
@@ -135,20 +156,17 @@ class TimrApi:
         except requests.exceptions.HTTPError as e:
             status_code = e.response.status_code
             response_data = None
+            problem_type = None
             error_msg = f"API request failed with status code {status_code}"
 
-            # Extract detailed error information from response
+            # Extract detailed error information from the RFC 9457 problem details response
             try:
-                if e.response.headers.get('Content-Type', '').startswith('application/json'):
+                content_type = e.response.headers.get('Content-Type', '')
+                if content_type.startswith(('application/json', 'application/problem+json')):
                     response_data = e.response.json()
                     if isinstance(response_data, dict):
-                        # Use API-provided error message if available
-                        if "message" in response_data:
-                            error_msg = response_data["message"]
-                        elif "error" in response_data:
-                            error_msg = response_data["error"]
-                        elif "detail" in response_data:
-                            error_msg = response_data["detail"]
+                        problem_type = response_data.get("type")
+                        error_msg = _format_problem_message(response_data) or error_msg
                 else:
                     response_data = e.response.text[:500]  # Limit text response length
             except Exception:
@@ -172,12 +190,12 @@ class TimrApi:
                 status_code=status_code,
                 response=response_data,
                 request_data=enhanced_request_data,
-                user_id=getattr(self.user, 'id', None) if self.user else None,
+                user_id=self.user.get('id') if self.user else None,
                 operation=f"{method} {endpoint}"
             )
             
             # Create enhanced TimrApiError with user-friendly message
-            api_error = TimrApiError(user_message, status_code, response_data)
+            api_error = TimrApiError(user_message, status_code, response_data, problem_type)
             api_error.technical_message = error_msg  # Keep technical message for debugging
             raise api_error from e
             
@@ -196,7 +214,7 @@ class TimrApi:
                     category=ErrorCategory.NETWORK,
                     severity=ErrorSeverity.MEDIUM,
                     operation=f"{method} {endpoint}",
-                    user_id=getattr(self.user, 'id', None) if self.user else None,
+                    user_id=self.user.get('id') if self.user else None,
                     api_endpoint=endpoint,
                     request_data=enhanced_request_data
                 )
@@ -221,7 +239,7 @@ class TimrApi:
                     category=ErrorCategory.NETWORK,
                     severity=ErrorSeverity.MEDIUM,
                     operation=f"{method} {endpoint} (timeout)",
-                    user_id=getattr(self.user, 'id', None) if self.user else None,
+                    user_id=self.user.get('id') if self.user else None,
                     api_endpoint=endpoint,
                     request_data=enhanced_request_data
                 )
@@ -243,7 +261,7 @@ class TimrApi:
                     category=ErrorCategory.NETWORK,
                     severity=ErrorSeverity.HIGH,
                     operation=f"{method} {endpoint}",
-                    user_id=getattr(self.user, 'id', None) if self.user else None,
+                    user_id=self.user.get('id') if self.user else None,
                     api_endpoint=endpoint,
                     request_data=enhanced_request_data
                 )
@@ -326,74 +344,17 @@ class TimrApi:
         logger.debug(f"Completed cursor paginated request to {endpoint}: {len(all_items)} total items from {page_count} pages")
         return all_items
 
-    def login(self, username, password):
+    def get_user(self, user_id):
         """
-        Authenticate with the Timr API.
+        Get a specific user.
 
         Args:
-            username (str): Username/email for Timr.com
-            password (str): Password for Timr.com
+            user_id (str): User ID
 
         Returns:
-            dict: Authentication response with token and user info
-
-        Raises:
-            TimrApiError: If authentication fails
+            dict: User entry
         """
-        data = {
-            "identifier": self.company_id,
-            "login": username,
-            "password": password
-        }
-
-        response = self._request("POST", "/login", data=data)
-
-        if response and "token" in response:
-            self.token = response["token"]
-            self.user = response.get("user", {})
-            
-            # Store token expiry if provided
-            if "valid_until" in response and response["valid_until"]:
-                try:
-                    # Parse the expiry datetime string
-                    expiry_str = response["valid_until"]
-                    # Handle ISO format with timezone offset
-                    self.token_expiry = datetime.datetime.fromisoformat(expiry_str.replace('Z', '+00:00'))
-                    logger.info(f"Token expires at: {self.token_expiry}")
-                except (ValueError, TypeError, AttributeError) as e:
-                    logger.warning(f"Could not parse token expiry '{response.get('valid_until')}': {e}")
-                    self.token_expiry = None
-            else:
-                self.token_expiry = None
-                
-            return response
-        else:
-            raise TimrApiError("Authentication failed, no token received")
-
-    def logout(self):
-        """Clear authentication token and user info."""
-        self.token = None
-        self.token_expiry = None
-        self.user = None
-
-    def is_authenticated(self):
-        """Check if the client is authenticated and token is still valid."""
-        if self.token is None:
-            return False
-            
-        # If we have a token expiry, check if it's still valid
-        if self.token_expiry is not None:
-            current_time = datetime.datetime.now(pytz.UTC)
-            
-            if current_time >= self.token_expiry:
-                logger.info(f"Token expired at {self.token_expiry}, current time is {current_time}")
-                # Clear expired token
-                self.token = None
-                self.token_expiry = None
-                self.user = None
-                return False
-                
-        return True
+        return self._request("GET", f"/users/{user_id}")
 
     def _format_date_for_query(self, dt):
         """Format a date for query parameters (YYYY-MM-DD)."""
@@ -483,9 +444,9 @@ class TimrApi:
             params["start_to"] = self._format_date_for_query(end_date)
 
         if user_id:
-            params["user"] = user_id
+            params["users"] = user_id
         elif self.user and "id" in self.user:
-            params["user"] = self.user["id"]
+            params["users"] = self.user["id"]
 
         # Use centralized pagination handling
         return self._request_paginated("/working-times", params=params)
@@ -494,18 +455,18 @@ class TimrApi:
             self,
             start,
             end,
+            working_time_type_id,
             status="changeable",
-            pause_duration=0,
-            working_time_type_id=None):
+            pause_duration=0):
         """
-        Create a new working time entry.
+        Create a new working time entry for the current user.
 
         Args:
             start (datetime or str): Start time
             end (datetime or str): End time
+            working_time_type_id (str): Type ID for working time
             status (str, optional): Status of the entry
             pause_duration (int, optional): Pause duration in minutes
-            working_time_type_id (str, optional): Type ID for working time
 
         Returns:
             dict: Created working time entry
@@ -514,15 +475,10 @@ class TimrApi:
             "start": self._format_datetime_iso8601(start),
             "end": self._format_datetime_iso8601(end),
             "status": status,
-            "changed": True
+            "changed": True,
+            "user_id": self.user["id"],
+            "working_time_type_id": working_time_type_id
         }
-
-        # Only add working_time_type_id if provided
-        if working_time_type_id:
-            data["working_time_type_id"] = working_time_type_id
-        else:
-            # Use default attendance time working type
-            data["working_time_type_id"] = "3f1953ee-f5d6-471f-a4ed-95ced921dd86"
 
         if pause_duration > 0:
             # Use break_times array format from the API documentation
@@ -534,9 +490,6 @@ class TimrApi:
                 "duration_minutes":
                 pause_duration
             }]
-
-        if self.user and "id" in self.user:
-            data["user_id"] = self.user["id"]
 
         return self._request("POST", "/working-times", data=data)
 
@@ -630,142 +583,29 @@ class TimrApi:
         """
         return self._request("DELETE", f"/working-times/{working_time_id}")
 
-    def get_tasks(self, search=None, active_only=True):
+    def get_bookable_tasks(self, search=None):
         """
-        Get available tasks.
+        Get the tasks the current user can book project times on today.
+
+        The Timr API filters for tasks the user may record on, which are bookable
+        and active today. Activity takes end dates inherited from closed parent
+        tasks into account.
 
         Args:
-            search (str, optional): Search term for filtering tasks
-            active_only (bool, optional): If True, only return active tasks
+            search (str, optional): Only return tasks whose name contains this text
 
         Returns:
             list: Task entries
         """
-        params = {}
+        params = {
+            "bookable": True,
+            "active_at": datetime.date.today().isoformat()
+        }
 
-        if search and len(search) >= 3:
+        if search:
             params["name"] = search
 
-        # Use centralized pagination handling with correct cursor pagination
-        all_tasks = self._request_paginated("/tasks", params=params, limit=500)
-
-        # Filter active tasks if requested
-        if active_only:
-            # Clear parent task cache for this get_tasks operation
-            self._parent_task_cache = {}
-            active_tasks = []
-
-            for task in all_tasks:
-                # Use the new comprehensive filtering that checks parent tasks too
-                if self._is_task_effectively_bookable(task):
-                    active_tasks.append(task)
-
-            # Clear cache after filtering is complete
-            self._parent_task_cache = {}
-            return active_tasks
-
-        return all_tasks
-
-    def _get_task_by_id(self, task_id):
-        """
-        Get a specific task by its ID, with caching support.
-        
-        Args:
-            task_id (str): Task ID to fetch
-            
-        Returns:
-            dict: Task data
-            
-        Raises:
-            TimrApiError: If the task cannot be fetched
-        """
-        # Check cache first
-        if task_id in self._parent_task_cache:
-            return self._parent_task_cache[task_id]
-        
-        # Fetch from API and cache the result
-        try:
-            task_data = self._request("GET", f"/tasks/{task_id}")
-            self._parent_task_cache[task_id] = task_data
-            return task_data
-        except TimrApiError:
-            # Don't cache API errors - always retry failed requests
-            raise
-
-    def _is_task_effectively_bookable(self, task):
-        """
-        Check if a task is effectively bookable by verifying that both the task
-        and all its parent tasks are not closed (don't have past end_dates).
-        
-        Args:
-            task (dict): Task data to check
-            
-        Returns:
-            bool: True if task is effectively bookable, False otherwise
-        """
-        now = datetime.datetime.now(pytz.UTC)
-        
-        # Check the task itself first
-        if not self._is_task_active(task, now):
-            return False
-            
-        # Check parent tasks recursively
-        current_task = task
-        while current_task and current_task.get('parent_task'):
-            parent_info = current_task.get('parent_task')
-            parent_id = parent_info.get('id')
-            
-            if not parent_id:
-                break
-                
-            try:
-                parent_task = self._get_task_by_id(parent_id)
-                if not self._is_task_active(parent_task, now):
-                    return False
-                current_task = parent_task
-            except TimrApiError as e:
-                # If we can't fetch the parent task, assume it's active
-                # to avoid blocking tasks due to temporary API issues
-                break
-                
-        return True
-        
-    def _is_task_active(self, task, now):
-        """
-        Check if a single task is active (not past its end_date).
-        
-        Args:
-            task (dict): Task data to check
-            now (datetime): Current time for comparison
-            
-        Returns:
-            bool: True if task is active, False if closed
-        """
-        if "end_date" not in task or not task["end_date"]:
-            return True
-            
-        try:
-            end_date_str = task["end_date"]
-            if isinstance(end_date_str, str):
-                # Handle timezone if present
-                if 'Z' in end_date_str:
-                    task_end_date = datetime.datetime.fromisoformat(
-                        end_date_str.replace('Z', '+00:00'))
-                elif '+' in end_date_str or '-' in end_date_str[10:]:
-                    # Already has timezone info
-                    task_end_date = datetime.datetime.fromisoformat(end_date_str)
-                else:
-                    # No timezone info, assume UTC
-                    task_end_date = datetime.datetime.fromisoformat(end_date_str)
-                    task_end_date = task_end_date.replace(tzinfo=pytz.UTC)
-                    
-                # Check if end date is in the future
-                return task_end_date > now
-        except (ValueError, TypeError):
-            # If we can't parse the date, assume task is active
-            pass
-            
-        return True
+        return self._request_paginated(f"/users/{self.user['id']}/tasks", params=params)
 
     def get_project_times(self,
                           start_date=None,
@@ -793,9 +633,9 @@ class TimrApi:
             params["start_to"] = self._format_date_for_query(end_date)
 
         if user_id:
-            params["user"] = user_id
+            params["users"] = user_id
         elif self.user and "id" in self.user:
-            params["user"] = self.user["id"]
+            params["users"] = self.user["id"]
 
         if task_id:
             params["task"] = task_id
@@ -834,53 +674,25 @@ class TimrApi:
             "end": self._format_datetime_iso8601(end),
             "status": status,
             "task_id": task_id,
-            "changed": True
+            "changed": True,
+            "user_id": self.user["id"]
         }
-
-        # Add user ID if available
-        if self.user and "id" in self.user:
-            data["user_id"] = self.user["id"]
 
         try:
             return self._request("POST", "/project-times", data=data)
         except TimrApiError as e:
-            # Enhanced business rule detection and user messaging
-            error_msg = str(e).lower()
-            technical_msg = getattr(e, 'technical_message', str(e))
-            
-            # Detect specific business rule violations
-            if "not bookable" in error_msg or "task is not bookable" in error_msg:
-                user_msg = timr_api_error_handler.log_business_rule_violation(
-                    rule_type="non_bookable_task",
-                    details=f"Task {task_id} is not bookable",
-                    user_id=getattr(self.user, 'id', None) if self.user else None,
-                    task_id=task_id
-                )
-                enhanced_error = TimrApiError(user_msg, e.status_code, e.response)
-                enhanced_error.technical_message = technical_msg
-                raise enhanced_error from e
-            elif "frozen" in error_msg or "locked" in error_msg:
-                user_msg = timr_api_error_handler.log_business_rule_violation(
-                    rule_type="frozen_time",
-                    details="Working time is frozen and cannot be modified",
-                    user_id=getattr(self.user, 'id', None) if self.user else None
-                )
-                enhanced_error = TimrApiError(user_msg, e.status_code, e.response)
-                enhanced_error.technical_message = technical_msg
-                raise enhanced_error from e
-            elif "overlap" in error_msg:
-                user_msg = timr_api_error_handler.log_business_rule_violation(
-                    rule_type="overlapping_times",
-                    details="Time entry overlaps with existing entries",
-                    user_id=getattr(self.user, 'id', None) if self.user else None,
-                    task_id=task_id
-                )
-                enhanced_error = TimrApiError(user_msg, e.status_code, e.response)
-                enhanced_error.technical_message = technical_msg
-                raise enhanced_error from e
-            
-            # Re-raise with original error if no specific rule detected
-            raise
+            if e.problem_type != PROBLEM_TYPE_TASK_NOT_BOOKABLE:
+                raise
+
+            user_msg = timr_api_error_handler.log_business_rule_violation(
+                rule_type="non_bookable_task",
+                details=f"Task {task_id} is not bookable",
+                user_id=self.user["id"],
+                task_id=task_id
+            )
+            enhanced_error = TimrApiError(user_msg, e.status_code, e.response, e.problem_type)
+            enhanced_error.technical_message = e.get_technical_message()
+            raise enhanced_error from e
 
     def get_project_time(self, project_time_id):
         """

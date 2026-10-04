@@ -4,7 +4,7 @@ import json
 import datetime
 from app import app
 from timr_utils import UIProjectTime, ProjectTimeConsolidator
-from tests.utils import REALISTIC_LOGIN_RESPONSE
+from tests.utils import REALISTIC_USER
 
 
 class TestUIProjectTimeEndpoints(unittest.TestCase):
@@ -27,14 +27,14 @@ class TestUIProjectTimeEndpoints(unittest.TestCase):
         
         # Configure session.get to return realistic user data
         self.mock_session.get.side_effect = lambda key, default=None: {
-            'token': REALISTIC_LOGIN_RESPONSE['token'],
-            'user': REALISTIC_LOGIN_RESPONSE['user']
+            'token': 'test-access-token',
+            'user': REALISTIC_USER
         }.get(key, default)
         
         # Mock the get_current_user function
         self.get_current_user_patch = patch('app.get_current_user')
         self.mock_get_current_user = self.get_current_user_patch.start()
-        self.mock_get_current_user.return_value = REALISTIC_LOGIN_RESPONSE['user']
+        self.mock_get_current_user.return_value = REALISTIC_USER
 
         # Mock the TimrApi
         self.timr_api_patch = patch('app.timr_api')
@@ -336,7 +336,7 @@ class TestUIProjectTimeEndpoints(unittest.TestCase):
             field="ui_project_time_deletion",
             value={'working_time_id': 'wt123', 'task_id': 'invalid-task'},
             reason="Invalid task ID format",
-            user_id=REALISTIC_LOGIN_RESPONSE['user']['id']
+            user_id=REALISTIC_USER['id']
         )
         
         # Verify standard error logging was also called
@@ -389,7 +389,7 @@ class TestUIProjectTimeEndpoints(unittest.TestCase):
         self.assertEqual(error_context.category, ErrorCategory.SYSTEM)
         self.assertEqual(error_context.severity, ErrorSeverity.HIGH)
         self.assertEqual(error_context.operation, "delete_ui_project_time")
-        self.assertEqual(error_context.user_id, REALISTIC_LOGIN_RESPONSE['user']['id'])
+        self.assertEqual(error_context.user_id, REALISTIC_USER['id'])
         self.assertEqual(error_context.working_time_id, 'wt123')
         self.assertEqual(error_context.task_id, 'task1')
     

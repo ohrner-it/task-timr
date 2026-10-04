@@ -69,9 +69,11 @@ echo "🔐 Please provide the required configuration:"
 read -p "Session secret (strong random string): " SESSION_SECRET
 read -p "Timr company ID [ohrnerit]: " TIMR_COMPANY_ID
 TIMR_COMPANY_ID=${TIMR_COMPANY_ID:-ohrnerit}
-read -p "Tasklist Timr username: " TASKLIST_TIMR_USER
-read -s -p "Tasklist Timr password: " TASKLIST_TIMR_PASSWORD
+echo "ℹ️  OAuth client with grant type 'Authorization Code' from Timr.com (Administration > Settings > Integrations)"
+read -p "Timr OAuth client ID: " TIMR_OAUTH_CLIENT_ID
+read -s -p "Timr OAuth client secret: " TIMR_OAUTH_CLIENT_SECRET
 echo
+read -p "OAuth redirect URI (as configured for the client, e.g. https://tasktimr.example.com/oauth/callback): " TIMR_OAUTH_REDIRECT_URI
 
 echo
 echo "🌐 Network configuration:"
@@ -88,7 +90,7 @@ elif [ "$BIND_IP" = "127.0.0.1" ]; then
 fi
 
 # Validate inputs
-if [ -z "${SESSION_SECRET}" ] || [ -z "${TASKLIST_TIMR_USER}" ] || [ -z "${TASKLIST_TIMR_PASSWORD}" ]; then
+if [ -z "${SESSION_SECRET}" ] || [ -z "${TIMR_OAUTH_CLIENT_ID}" ] || [ -z "${TIMR_OAUTH_CLIENT_SECRET}" ] || [ -z "${TIMR_OAUTH_REDIRECT_URI}" ]; then
     echo "❌ All configuration values are required"
     exit 1
 fi
@@ -96,8 +98,9 @@ fi
 # Validate each input for security
 validate_input "${SESSION_SECRET}" "Session secret"
 validate_input "${TIMR_COMPANY_ID}" "Company ID"
-validate_input "${TASKLIST_TIMR_USER}" "Username"
-validate_input "${TASKLIST_TIMR_PASSWORD}" "Password"
+validate_input "${TIMR_OAUTH_CLIENT_ID}" "OAuth client ID"
+validate_input "${TIMR_OAUTH_CLIENT_SECRET}" "OAuth client secret"
+validate_input "${TIMR_OAUTH_REDIRECT_URI}" "OAuth redirect URI"
 validate_input "${BIND_IP}" "Bind IP"
 validate_input "${PORT}" "Port"
 
@@ -200,8 +203,9 @@ cat <<EOF | sudo install -m 640 -o root -g "${APP_USER}" /dev/stdin /etc/task-ti
 FLASK_ENV=production
 SESSION_SECRET=${SESSION_SECRET}
 TIMR_COMPANY_ID=${TIMR_COMPANY_ID}
-TASKLIST_TIMR_USER=${TASKLIST_TIMR_USER}
-TASKLIST_TIMR_PASSWORD=${TASKLIST_TIMR_PASSWORD}
+TIMR_OAUTH_CLIENT_ID=${TIMR_OAUTH_CLIENT_ID}
+TIMR_OAUTH_CLIENT_SECRET=${TIMR_OAUTH_CLIENT_SECRET}
+TIMR_OAUTH_REDIRECT_URI=${TIMR_OAUTH_REDIRECT_URI}
 BIND_IP=${BIND_IP}
 PORT=${PORT}
 EOF

@@ -84,23 +84,35 @@ Unit tests with mocks are useful for testing code in isolation, but they rely on
 
 ### Running Integration Tests
 
-**WARNING**: Integration tests make real changes to your Timr.com account! They create and delete working times and project times. The tests use yesterday's date to avoid conflicts and stay within API restrictions, but use with caution.
+**WARNING**: Integration tests make real changes to your Timr.com account! They create and delete working times and project times. The tests use yesterday's date to avoid conflicts and stay within API restrictions, but use with caution. Preferably use a dedicated Timr.com test account, and make sure nothing else books times for the test user on that day while the tests run.
 
-1. Set environment variables for Timr.com credentials:
+Integration tests cannot perform the interactive OAuth2 login of the web application. They
+authenticate with an OAuth2 client with grant type "Client Credentials" and act on behalf
+of a dedicated test user, who needs at least one bookable task (some tests need up to four).
+
+1. Set environment variables for the client credentials OAuth client and the test user:
    ```bash
-   export TIMR_USER=your_username
-   export TIMR_PASSWORD=your_password
+   export TIMR_SERVICE_CLIENT_ID=your-client-credentials-client-id
+   export TIMR_SERVICE_CLIENT_SECRET=your-client-credentials-client-secret
+   export TIMR_TEST_USER_ID=timr-user-id-of-the-test-user
    ```
 
 2. Run integration tests:
    ```bash
-   python -m unittest test_timr_api_integration.py
+   python -m unittest tests.test_timr_api_integration tests.test_timr_api_integration_enhanced
    ```
+
+Without these variables the integration tests are skipped.
+
+Note that the client credentials token may access the data of all users, while the web
+application works with the permissions of the logged-in user. The integration tests
+therefore verify the API contract, but not the permissions of regular users; check
+changes affecting permissions additionally by logging in to the application.
 
 ### Integration Test Coverage
 
 Integration tests cover the full lifecycle:
-- **Authentication**: Login with valid and invalid credentials  
+- **Authentication**: Access token via OAuth2 and acting for the test user
 - **Working Times**: Complete CRUD operations
 - **Tasks**: Retrieval and search functionality
 - **Project Times**: Complete CRUD operations

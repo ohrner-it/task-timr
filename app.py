@@ -8,11 +8,14 @@ Licensed under the MIT License
 
 import os
 import logging
+import secrets
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from timr_api import TimrApi, TimrApiError
+from timr_oauth import TimrOAuthClient, create_pkce_pair, token_expires_soon, token_is_expired
 from timr_utils import ProjectTimeConsolidator, UIProjectTime
-from config import COMPANY_ID, TIME_FORMAT, DATE_FORMAT, TASKLIST_TIMR_USER, TASKLIST_TIMR_PASSWORD, SESSION_SECRET
+from config import (COMPANY_ID, TIME_FORMAT, DATE_FORMAT, SESSION_SECRET, TIMR_OAUTH_CLIENT_ID,
+                    TIMR_OAUTH_CLIENT_SECRET, TIMR_OAUTH_REDIRECT_URI)
 from error_handler import app_error_handler, ErrorCategory, ErrorSeverity, ErrorContext
 
 # Configure logging
@@ -26,10 +29,17 @@ app = Flask(__name__)
 # Secret key is required for Flask sessions - used to cryptographically sign session cookies
 # This secures user login tokens and session data stored in browser cookies
 app.secret_key = SESSION_SECRET
+# The session cookie carries the OAuth tokens: only send it via HTTPS when the
+# application is served via HTTPS, and not with cross-site subrequests. "Lax"
+# still sends it on the redirect back from the Timr.com login.
+app.config.update(
+    SESSION_COOKIE_SECURE=TIMR_OAUTH_REDIRECT_URI.startswith('https://'),
+    SESSION_COOKIE_SAMESITE='Lax'
+)
 
-# Initialize Timr API clients and ProjectTimeConsolidator
-timr_api = TimrApi(company_id=COMPANY_ID)
-timr_api_elevated = TimrApi(company_id=COMPANY_ID)
+# Initialize Timr API client, OAuth client and ProjectTimeConsolidator
+timr_api = TimrApi()
+oauth_client = TimrOAuthClient(TIMR_OAUTH_CLIENT_ID, TIMR_OAUTH_CLIENT_SECRET, TIMR_OAUTH_REDIRECT_URI)
 project_time_consolidator = ProjectTimeConsolidator(timr_api)
 
 # Recent tasks cache
@@ -135,11 +145,7 @@ def get_project_times():
     
     if not working_time_id:
         return jsonify({'error': 'Working time ID is required'}), 400
-        
-    # Set token in API client
-    timr_api.token = session.get('token')
-    timr_api.user = user
-    
+
     try:
         # Get the working time
         working_time = timr_api.get_working_time(working_time_id)
@@ -182,11 +188,46 @@ def get_project_times():
         return jsonify({'error': user_message}), 500
 
 
+def _store_tokens(tokens):
+    """Store OAuth tokens in the session."""
+    session['token'] = tokens['access_token']
+    session['refresh_token'] = tokens['refresh_token']
+    session['token_expires_at'] = tokens['expires_at']
+
+
 def get_current_user():
-    """Get the current authenticated user."""
+    """
+    Get the current authenticated user and authorize the Timr API client for this request.
+
+    Refreshes the access token shortly before it expires. If the refresh fails
+    and the access token has expired, the session is ended and the user has to
+    log in again.
+
+    Returns:
+        dict: Current user, or None if not authenticated
+    """
     if not session.get('token'):
         return None
-    return session.get('user')
+
+    if token_expires_soon(session.get('token_expires_at')):
+        try:
+            _store_tokens(oauth_client.refresh_tokens(session.get('refresh_token')))
+        except TimrApiError as e:
+            if not token_is_expired(session.get('token_expires_at')):
+                # Timr.com rotates refresh tokens, so concurrent requests of the same
+                # session fail to refresh after the first one has succeeded. Leaving
+                # the session untouched keeps the cookie with the refreshed tokens.
+                logger.info(f"Access token refresh failed, token still valid: {e.get_technical_message()}")
+            else:
+                logger.info(f"Ending session, access token refresh failed: {e.get_technical_message()}")
+                session.clear()
+                flash('Your Timr.com session has expired. Please log in again.', 'warning')
+                return None
+
+    user = session.get('user')
+    timr_api.token = session['token']
+    timr_api.user = user
+    return user
 
 
 def format_date(date_obj):
@@ -225,39 +266,69 @@ def index():
         return render_template('index.html', user=None, company_id=COMPANY_ID)
 
 
-@app.route('/login', methods=['POST'])
+@app.route('/login')
 def login():
-    """Handle login form submission."""
-    username = request.form.get('username')
-    password = request.form.get('password')
+    """Start the OAuth2 authorization code login by redirecting to Timr.com."""
+    state = secrets.token_urlsafe(32)
+    code_verifier, code_challenge = create_pkce_pair()
+    try:
+        authorization_url = oauth_client.authorization_url(state, code_challenge)
+    except TimrApiError as e:
+        logger.error(f"Cannot start Timr.com login: {e.get_technical_message()}")
+        flash(f'Login failed: {e.get_user_message()}', 'danger')
+        return redirect(url_for('index'))
 
-    if not username or not password:
-        flash('Username and password are required', 'danger')
+    session['oauth_state'] = state
+    session['oauth_code_verifier'] = code_verifier
+    return redirect(authorization_url)
+
+
+@app.route('/oauth/callback')
+def oauth_callback():
+    """Complete the OAuth2 login after Timr.com redirected the user back."""
+    expected_state = session.pop('oauth_state', None)
+    code_verifier = session.pop('oauth_code_verifier', None)
+
+    if request.args.get('error'):
+        logger.warning(f"Timr.com login was not completed: {request.args.get('error')!r}")
+        flash('Login at Timr.com was not completed. Please try again.', 'danger')
+        return redirect(url_for('index'))
+
+    code = request.args.get('code')
+    state = request.args.get('state', '')
+    if not code or not expected_state or not secrets.compare_digest(state, expected_state):
+        logger.warning("Rejected OAuth callback with missing code or invalid state")
+        flash('Login failed: the login request was invalid or has expired. Please try again.', 'danger')
         return redirect(url_for('index'))
 
     try:
-        # Attempt to log in
-        response = timr_api.login(username, password)
-
-        # Store token and user in session
-        session['token'] = response.get('token')
-        session['user'] = response.get('user')
-
-        flash('Login successful', 'success')
-        return redirect(url_for('index'))
+        tokens = oauth_client.exchange_code(code, code_verifier)
+        timr_api.token = tokens['access_token']
+        timr_api.user = None
+        user = timr_api.get_user(oauth_client.fetch_user_id(tokens['access_token']))
     except TimrApiError as e:
-        flash(f'Login failed: {e.message}', 'danger')
+        logger.error(f"Timr.com login failed: {e.get_technical_message()}")
+        flash(f'Login failed: {e.get_user_message()}', 'danger')
         return redirect(url_for('index'))
+
+    _store_tokens(tokens)
+    # Keep only the user data the application needs in the session cookie
+    session['user'] = {'id': user['id'], 'fullname': user['fullname']}
+    flash('Login successful', 'success')
+    return redirect(url_for('index'))
 
 
 @app.route('/logout')
 def logout():
-    """Handle logout."""
-    # Clear session
+    """Handle logout: end the session and revoke the refresh token at Timr.com."""
+    refresh_token = session.get('refresh_token')
     session.clear()
 
-    # Clear API client token
-    timr_api.logout()
+    if refresh_token:
+        try:
+            oauth_client.revoke_token(refresh_token)
+        except TimrApiError as e:
+            logger.warning(f"Could not revoke refresh token on logout: {e.get_technical_message()}")
 
     flash('Logged out successfully', 'success')
     return redirect(url_for('index'))
@@ -283,10 +354,6 @@ def get_working_times():
         else:
             return jsonify({'error':
                             f"Invalid date format: '{date_str}'"}), 400
-
-        # Set token in API client
-        timr_api.token = session.get('token')
-        timr_api.user = user
 
         # Format the dates as ISO strings for the API
         start_date_iso = f"{date.strftime('%Y-%m-%d')}T00:00:00Z"
@@ -347,9 +414,8 @@ def create_working_time():
     if not start or not end:
         return jsonify({'error': 'Start and end times are required'}), 400
 
-    # Set token in API client
-    timr_api.token = session.get('token')
-    timr_api.user = user
+    if not working_time_type_id:
+        return jsonify({'error': 'Working time type is required'}), 400
 
     try:
         # Check for overlapping working times
@@ -422,10 +488,6 @@ def update_working_time(working_time_id):
     end = data.get('end')
     pause_duration = data.get('pause_duration')
     working_time_type_id = data.get('working_time_type_id')
-
-    # Set token in API client
-    timr_api.token = session.get('token')
-    timr_api.user = user
 
     try:
         # Get the current working time to check if it's ongoing
@@ -505,10 +567,6 @@ def delete_working_time(working_time_id):
     if not user:
         return jsonify({'error': 'Unauthorized'}), 401
 
-    # Set token in API client
-    timr_api.token = session.get('token')
-    timr_api.user = user
-
     try:
         # Get the current working time to check if it's ongoing
         current_working_time = timr_api.get_working_time(working_time_id)
@@ -543,28 +601,8 @@ def search_tasks():
     if len(search_term) < 3:
         return jsonify({'tasks': []})
 
-    # Use elevated API client for task operations (user authentication still required)
-    # Authenticate elevated API client if not already authenticated
-    if not timr_api_elevated.is_authenticated():
-        if TASKLIST_TIMR_USER and TASKLIST_TIMR_PASSWORD:
-            try:
-                timr_api_elevated.login(TASKLIST_TIMR_USER, TASKLIST_TIMR_PASSWORD)
-                logger.info("Task list user authenticated successfully for task search")
-            except TimrApiError as e:
-                logger.error(f"Task list user authentication failed: {e}")
-                return jsonify({'tasks': [], 'error': 'Task search is currently unavailable. Please contact your administrator to configure the task list credentials.'})
-        else:
-            logger.error("Task list user credentials not configured")
-            return jsonify({'tasks': [], 'error': 'Task search unavailable - task list user not configured'})
-    
     try:
-        # Search for tasks using elevated privileges
-        tasks = timr_api_elevated.get_tasks(search=search_term, active_only=True)
-
-        # Add search term to task name if not already in the name
-        for task in tasks:
-            if 'name' not in task and 'title' in task:
-                task['name'] = task['title']
+        tasks = timr_api.get_bookable_tasks(search=search_term)
 
         # Sort tasks by name ascending, then by ID ascending as fallback
         sorted_tasks = sorted(tasks, key=lambda x: (x.get('name', ''), x.get('id', '')))
@@ -587,10 +625,6 @@ def get_recent_tasks():
 
     # If cache is empty, populate it from recent project times
     if user_id not in recent_tasks_cache or not recent_tasks_cache[user_id]:
-        # Set token in API client
-        timr_api.token = session.get('token')
-        timr_api.user = user
-        
         try:
             # Get recent project times from the last 30 days
             from datetime import datetime, timedelta
@@ -632,10 +666,6 @@ def get_working_time_types():
 
     if not user:
         return jsonify({'error': 'Unauthorized'}), 401
-
-    # Set token in API client
-    timr_api.token = session.get('token')
-    timr_api.user = user
 
     try:
         # Get all working time types and let backend handle the logic
@@ -695,10 +725,6 @@ def get_ui_project_times(working_time_id):
 
     if not user:
         return jsonify({'error': 'Unauthorized'}), 401
-
-    # Set token in API client
-    timr_api.token = session.get('token')
-    timr_api.user = user
 
     try:
         # Get the working time details
@@ -777,10 +803,6 @@ def add_ui_project_time(working_time_id):
             user_id=user.get('id') if user else None
         )
         return jsonify({'error': user_message}), 400
-
-    # Set token in API client
-    timr_api.token = session.get('token')
-    timr_api.user = user
 
     try:
         # Get the working time details
@@ -905,10 +927,6 @@ def update_ui_project_time(working_time_id, task_id):
     if duration_minutes is not None and duration_minutes <= 0:
         return jsonify({'error': 'duration_minutes must be positive'}), 400
 
-    # Set token in API client
-    timr_api.token = session.get('token')
-    timr_api.user = user
-
     try:
         # Get the working time details
         working_time = timr_api.get_working_time(working_time_id)
@@ -970,10 +988,6 @@ def delete_ui_project_time(working_time_id, task_id):
 
     if not user:
         return jsonify({'error': 'Unauthorized'}), 401
-
-    # Set token in API client
-    timr_api.token = session.get('token')
-    timr_api.user = user
 
     try:
         # Get the working time details
@@ -1054,10 +1068,6 @@ def replace_ui_project_times(working_time_id):
     if not data or 'ui_project_times' not in data:
         return jsonify({'error': 'ui_project_times is required'}), 400
 
-    # Set token in API client
-    timr_api.token = session.get('token')
-    timr_api.user = user
-
     try:
         # Get the working time details
         working_time = timr_api.get_working_time(working_time_id)
@@ -1132,10 +1142,6 @@ def validate_working_times():
 
     if not data or 'working_times' not in data:
         return jsonify({'error': 'working_times is required'}), 400
-
-    # Set token in API client
-    timr_api.token = session.get('token')
-    timr_api.user = user
 
     try:
         # Sanitize working times

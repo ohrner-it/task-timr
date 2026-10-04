@@ -1,9 +1,8 @@
 import unittest
-import os
 import datetime
 import logging
-from timr_api import TimrApi, TimrApiError
-from config import COMPANY_ID
+from timr_api import TimrApiError
+from tests.utils.integration import create_integration_api, get_attendance_working_time_type_id
 
 # Configure logging
 logging.basicConfig(
@@ -18,14 +17,13 @@ class TimrAPIIntegrationTest(unittest.TestCase):
 
     IMPORTANT: These tests will use the real Timr.com API service, not mocks.
 
-    To run these tests:
-    1. Set the environment variables TIMR_USER and TIMR_PASSWORD
-    2. The test will use the company ID from config.py (default: "ohrnerit")
+    To run these tests, set the environment variables described in
+    tests/utils/integration.py (client credentials OAuth client and test user ID).
 
     These tests will:
-    1. Login to the real Timr API
-    2. Create real working times and project times 
-    3. Validate the responses and behavior 
+    1. Obtain an OAuth2 access token from the real Timr authorization server
+    2. Create real working times and project times for the test user
+    3. Validate the responses and behavior
     4. Clean up any test data created
 
     WARNING: These tests WILL make changes to your Timr.com account!
@@ -34,31 +32,14 @@ class TimrAPIIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up test fixtures for all tests."""
-        # Get credentials from environment variables
-        cls.username = os.environ.get("TIMR_USER")
-        cls.password = os.environ.get("TIMR_PASSWORD")
-
-        # Skip tests if credentials are not set
-        if not cls.username or not cls.password:
-            raise unittest.SkipTest(
-                "Skipping integration tests: Set TIMR_USER and TIMR_PASSWORD environment variables to run"
-            )
-
-        # Initialize API client
-        cls.api = TimrApi(company_id=COMPANY_ID)
+        cls.api = create_integration_api()
+        cls.user_id = cls.api.user["id"]
+        cls.working_time_type_id = get_attendance_working_time_type_id(cls.api)
 
         # Test date (yesterday to avoid API restrictions)
         yesterday = datetime.date.today() - datetime.timedelta(days=1)
         cls.test_date = yesterday
         cls.test_date_str = yesterday.strftime("%Y-%m-%d")
-
-        # Login to Timr API
-        try:
-            cls.login_response = cls.api.login(cls.username, cls.password)
-            logger.info("Successfully logged in to Timr API")
-            cls.user_id = cls.api.user.get("id")
-        except TimrApiError as e:
-            raise unittest.SkipTest(f"Could not login to Timr API: {e}")
 
         # Test data tracking for cleanup - use sets to avoid duplicates
         cls.created_working_times = set()
@@ -119,38 +100,33 @@ class TimrAPIIntegrationTest(unittest.TestCase):
             start = f"{self.test_date_str}T09:00:00+00:00"
             end = f"{self.test_date_str}T17:00:00+00:00"
             pause_duration = 30
-            
-            wt = self.api.create_working_time(start=start, end=end, pause_duration=pause_duration)
+
+            wt = self.api.create_working_time(start=start, end=end, pause_duration=pause_duration,
+                                              working_time_type_id=self.working_time_type_id)
             self._track_working_time(wt["id"])
             return wt
 
     def _get_bookable_task(self):
         """Get a bookable task for testing."""
-        tasks = self.api.get_tasks()[:10]
-        self.assertGreaterEqual(len(tasks), 1)
-        
-        # Find a bookable task or use the first one
-        for task in tasks:
-            if task.get("bookable", False):
-                return task
+        tasks = self.api.get_bookable_tasks()
+        self.assertGreaterEqual(len(tasks), 1, "Test user needs at least one bookable task")
         return tasks[0]
 
-    def test_01_login_success(self):
-        """Test that login works correctly with valid credentials."""
-        # This login is already done in setUpClass, just verify the response
-        self.assertIsNotNone(self.login_response)
-        self.assertIn("token", self.login_response)
-        self.assertIsNotNone(self.user_id)
-        logger.info(f"Login successful, user ID: {self.user_id}")
+    def test_01_api_acts_for_test_user(self):
+        """Test that the client is authorized and resolved the test user via GET /users/{id}."""
+        self.assertEqual(self.api.user["id"], self.user_id)
+        self.assertIn("fullname", self.api.user)
 
-    def test_02_login_failure(self):
-        """Test that login fails with invalid credentials."""
-        # Create a new API instance for testing bad credentials
-        bad_api = TimrApi(company_id=COMPANY_ID)
+    def test_02_working_times_are_filtered_by_user(self):
+        """Test that the user filter is applied, even for tokens that can see all users."""
+        self._get_or_create_working_time()
 
-        # Try login with invalid credentials
-        with self.assertRaises(TimrApiError):
-            bad_api.login("wrong_username", "wrong_password")
+        # Query up to today to also cover entries other users are currently recording
+        working_times = self.api.get_working_times(start_date=self.test_date,
+                                                   end_date=datetime.date.today())
+
+        self.assertGreaterEqual(len(working_times), 1)
+        self.assertEqual({wt["user"]["id"] for wt in working_times}, {self.user_id})
 
     def test_03_create_working_time(self):
         """Test creating a working time."""
@@ -160,7 +136,8 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         pause_duration = 30
 
         # Create working time
-        wt = self.api.create_working_time(start=start, end=end, pause_duration=pause_duration)
+        wt = self.api.create_working_time(start=start, end=end, pause_duration=pause_duration,
+                                          working_time_type_id=self.working_time_type_id)
 
         # Track for cleanup
         self._track_working_time(wt["id"])
@@ -169,7 +146,11 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         self.assertIn("id", wt)
         self.assertIn("start", wt)
         self.assertIn("end", wt)
+        self.assertEqual(wt["user"]["id"], self.user_id)
+        self.assertEqual(wt["working_time_type"]["id"], self.working_time_type_id)
         self.assertEqual(wt["break_time_total_minutes"], pause_duration)
+        # The API reports the net duration with breaks already deducted
+        self.assertEqual(wt["duration"]["minutes"], 8 * 60 - pause_duration)
 
         logger.info(f"Created working time: {wt['id']}")
 
@@ -198,7 +179,8 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         end = f"{self.test_date_str}T17:00:00+00:00"
         pause_duration = 30
 
-        wt = self.api.create_working_time(start=start, end=end, pause_duration=pause_duration)
+        wt = self.api.create_working_time(start=start, end=end, pause_duration=pause_duration,
+                                          working_time_type_id=self.working_time_type_id)
         self._track_working_time(wt["id"])
 
         # Prepare update data
@@ -248,23 +230,24 @@ class TimrAPIIntegrationTest(unittest.TestCase):
 
         logger.info(f"Created project time: {pt['id']}")
 
-    def test_07_get_tasks(self):
-        """Test getting tasks."""
-        # Get tasks (limit to first 10)
-        tasks = self.api.get_tasks()[:10]
+    def test_07_get_bookable_tasks(self):
+        """Test that only bookable tasks which are active today are returned."""
+        tasks = self.api.get_bookable_tasks()
 
-        # Verify we got at least one task
         self.assertGreaterEqual(len(tasks), 1)
-
-        # Verify task structure
+        today = datetime.date.today().isoformat()
         for task in tasks:
             self.assertIn("id", task)
             self.assertIn("name", task)
+            self.assertTrue(task["bookable"], f"Task {task['breadcrumbs']} should be bookable")
+            # active_to also reflects end dates inherited from closed parent tasks
+            self.assertTrue(task["active_to"] is None or task["active_to"] >= today,
+                            f"Task {task['breadcrumbs']} should be active today")
 
     def test_08_search_tasks(self):
         """Test searching for tasks."""
         # Get tasks to find one to search for
-        tasks = self.api.get_tasks()[:10]
+        tasks = self.api.get_bookable_tasks()
         self.assertGreaterEqual(len(tasks), 1)
 
         task = tasks[0]  # Use first task for search test
@@ -273,7 +256,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         search_term = task["name"][:3]
 
         # Search for tasks
-        search_results = self.api.get_tasks(search=search_term)
+        search_results = self.api.get_bookable_tasks(search=search_term)
 
         # Verify we got at least one result
         self.assertGreaterEqual(len(search_results), 1)
@@ -353,7 +336,8 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         end = f"{self.test_date_str}T16:00:00+00:00"
         pause_duration = 30
 
-        wt = self.api.create_working_time(start=start, end=end, pause_duration=pause_duration)
+        wt = self.api.create_working_time(start=start, end=end, pause_duration=pause_duration,
+                                          working_time_type_id=self.working_time_type_id)
         self._track_working_time(wt["id"])
 
         # Delete working time
@@ -482,7 +466,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         Timr's cursor pagination and retrieves unique data on each page.
         """
         # Test pagination with tasks (usually has many results)
-        all_tasks = self.api.get_tasks()
+        all_tasks = self.api.get_bookable_tasks()
         
         # Verify we got some tasks
         self.assertGreater(len(all_tasks), 0, "Should retrieve at least one task")
@@ -505,11 +489,11 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         import copy
         
         # Make direct paginated requests to verify page differences
-        endpoint = "project-times"
+        endpoint = "/project-times"
         params = {
-            "user_id": self.user_id,
-            "start_date": (self.test_date - datetime.timedelta(days=30)).strftime('%Y-%m-%d'),
-            "end_date": self.test_date.strftime('%Y-%m-%d')
+            "users": self.user_id,
+            "start_from": (self.test_date - datetime.timedelta(days=30)).strftime('%Y-%m-%d'),
+            "start_to": self.test_date.strftime('%Y-%m-%d')
         }
         
         # Get first page
@@ -520,7 +504,7 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         
         if len(page1_data) >= 50:  # Only test if we have enough data for pagination
             # Get second page using page_token
-            page_token = page1_response.get('page_token')
+            page_token = page1_response.get('next_page_token')
             if page_token:
                 page2_params = copy.deepcopy(params)
                 page2_params['limit'] = 50
@@ -565,7 +549,8 @@ class TimrAPIIntegrationTest(unittest.TestCase):
         start1 = f"{self.test_date_str}T10:00:00+00:00"
         end1 = f"{self.test_date_str}T14:00:00+00:00"
 
-        wt1 = self.api.create_working_time(start=start1, end=end1)
+        wt1 = self.api.create_working_time(start=start1, end=end1,
+                                           working_time_type_id=self.working_time_type_id)
         self._track_working_time(wt1["id"])
 
         # Create second working time that overlaps with the first
@@ -574,7 +559,8 @@ class TimrAPIIntegrationTest(unittest.TestCase):
 
         # Try to create the overlapping working time
         try:
-            wt2 = self.api.create_working_time(start=start2, end=end2)
+            wt2 = self.api.create_working_time(start=start2, end=end2,
+                                               working_time_type_id=self.working_time_type_id)
             self._track_working_time(wt2["id"])
 
             # If we get here, the API allowed overlapping working times!

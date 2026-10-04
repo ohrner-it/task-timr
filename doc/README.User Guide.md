@@ -24,10 +24,13 @@ This approach is more natural and flexible, allowing you to track time based on 
 
 ## Logging In
 
-1. Enter your Timr.com username or email and password
-2. The application automatically connects to your company (ID: ohrnerit)
-3. Click the "Login" button
+1. Click the "Login with Timr.com" button
+2. You are redirected to the Timr.com login page; log in with your Timr.com account
+3. Timr.com sends you back to Task Timr
 4. Upon successful login, you'll see the main interface showing today's working times
+
+Your login stays valid while you use Task Timr. Clicking "Logout" ends the Task Timr
+session; your login session at Timr.com itself is not affected.
 
 ## Date Navigation
 
@@ -116,6 +119,8 @@ If there's unallocated time in a working time:
 2. Select a task from the dropdown results
 3. Use arrow keys to navigate results and Enter to select
 
+The search only shows tasks you can currently book time on in Timr.com.
+
 ### Using Recent Tasks
 
 1. View your 10 most recently used tasks under the "Recent Tasks" section
@@ -174,9 +179,9 @@ When expanded, working times show:
 ### Common Issues and Solutions
 
 **Login Problems**
-- Ensure you're using your correct Timr.com username/email and password
-- Check that your company ID is correctly configured (should be "ohrnerit")
-- If login fails, verify your credentials work on the official Timr.com website
+- If login fails, verify you can log in on the official Timr.com website
+- If Timr.com reports an invalid redirect URI or client, the Task Timr installation is
+  not configured correctly; please contact your administrator
 
 **Data Loading Issues**
 - If working times don't load, check the browser console for error messages

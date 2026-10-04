@@ -138,8 +138,16 @@ When developing Task Timr, follow these security practices:
 
 Edit `config.py` to configure:
 - `COMPANY_ID`: Your Timr.com company ID (default: "ohrnerit")
-- `API_BASE_URL`: The Timr API base URL
+- `API_BASE_URL`: The Timr API base URL (Timr.com API v1)
+- `OAUTH_ISSUER`: The Timr.com OAuth2 authorization server; its endpoints are read from the OpenID Provider metadata (`<issuer>/.well-known/openid-configuration`) on first use
 - Date and time formats
+
+Users log in via OAuth2 at Timr.com. Create an OAuth client with grant type
+"Authorization Code" in Timr.com under Administration > Settings > Integrations > API
+Credentials and register the redirect URL of your Task Timr installation for it, e.g.
+`http://localhost:5000/oauth/callback` for local development. Configure the client via
+`TIMR_OAUTH_CLIENT_ID`, `TIMR_OAUTH_CLIENT_SECRET` and `TIMR_OAUTH_REDIRECT_URI` (see
+[Environment Variables](#environment-variables)).
 
 ## Deployment
 
@@ -188,8 +196,9 @@ The script will prompt for:
    FLASK_ENV=production
    SESSION_SECRET=your-strong-secret
    TIMR_COMPANY_ID=your-company-id
-   TASKLIST_TIMR_USER=your-user
-   TASKLIST_TIMR_PASSWORD=your-password
+   TIMR_OAUTH_CLIENT_ID=your-oauth-client-id
+   TIMR_OAUTH_CLIENT_SECRET=your-oauth-client-secret
+   TIMR_OAUTH_REDIRECT_URI=https://tasktimr.example.com/oauth/callback
    BIND_IP=127.0.0.1
    PORT=5000
    ```
@@ -270,8 +279,9 @@ For containerized deployments, use the provided Docker configuration:
      -p 5000:5000 \
      -e SESSION_SECRET="your-production-secret" \
      -e TIMR_COMPANY_ID="your-company-id" \
-     -e TASKLIST_TIMR_USER="your-tasklist-user" \
-     -e TASKLIST_TIMR_PASSWORD="your-tasklist-password" \
+     -e TIMR_OAUTH_CLIENT_ID="your-oauth-client-id" \
+     -e TIMR_OAUTH_CLIENT_SECRET="your-oauth-client-secret" \
+     -e TIMR_OAUTH_REDIRECT_URI="http://localhost:5000/oauth/callback" \
      task-timr
    ```
 
@@ -330,14 +340,17 @@ Required environment variables for production:
 |----------|-------------|---------|
 | `SESSION_SECRET` | Secret key for session security | Strong random string (32+ characters) |
 | `TIMR_COMPANY_ID` | Your Timr.com company identifier | `ohrnerit` |
-| `TASKLIST_TIMR_USER` | Timr.com user with task access | `tasklist@company.com` |
-| `TASKLIST_TIMR_PASSWORD` | Password for task list user | User's password |
+| `TIMR_OAUTH_CLIENT_ID` | ID of the Timr.com OAuth client (grant type "Authorization Code") | `1234…@company.timr.com` |
+| `TIMR_OAUTH_CLIENT_SECRET` | Secret of that OAuth client | Shown in Timr.com when creating the client |
+| `TIMR_OAUTH_REDIRECT_URI` | Callback URL of this installation, must exactly match a redirect URL of the OAuth client | `https://tasktimr.example.com/oauth/callback` |
 
 Optional environment variables:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `FLASK_ENV` | Flask environment mode | `production` |
+| `TIMR_SERVICE_CLIENT_ID`, `TIMR_SERVICE_CLIENT_SECRET` | OAuth client with grant type "Client Credentials", only for developer tools (`raw_timr_responses.py`) and integration tests. It grants access to all data of the Timr.com account, so never configure it for the web application. | – |
+| `TIMR_TEST_USER_ID` | Timr.com user ID whose data developer tools and integration tests work with | – |
 
 ### Health Monitoring
 
@@ -375,6 +388,7 @@ task-timr/
 ├── app.py                           # Main Flask application
 ├── main.py                          # Application entry point
 ├── timr_api.py                      # Timr API client with pagination support
+├── timr_oauth.py                    # OAuth2 client for the Timr.com authorization server
 ├── timr_utils.py                    # Helper classes including ProjectTimeConsolidator
 ├── config.py                        # Configuration settings and environment variables
 ├── pyproject.toml                   # Python project metadata and dependencies
@@ -404,7 +418,9 @@ task-timr/
 │   ├── utils/                       # Test utilities package
 │   │   ├── __init__.py              # Package exports
 │   │   ├── mock_validator.py        # Mock validation framework
-│   │   └── mock_data.py            # Reference mock data structures
+│   │   ├── mock_data.py             # Reference mock data structures
+│   │   ├── http_responses.py        # Real requests.Response objects for HTTP boundary mocks
+│   │   └── integration.py           # Setup for integration tests against Timr.com
 │   ├── __init__.py                  # Makes tests a Python package
 │   ├── test_*.py                    # Python unit and integration tests
 │   ├── test_comprehensive_mock_validation.py  # Mock validation tests
@@ -497,10 +513,36 @@ The application follows RESTful principles with working time-scoped UIProjectTim
 ### Key Components
 
 - **TimrApi** (`timr_api.py`): Handles communication with the external Timr.com API
+- **TimrOAuthClient** (`timr_oauth.py`): Obtains, refreshes and revokes OAuth2 tokens at the Timr.com authorization server
 - **ProjectTimeConsolidator** (`timr_utils.py`): Translates between Timr's complex time slot model and our simplified task duration model
 - **Flask Routes** (`app.py`): Provides the REST API for the frontend
 
 The consolidator is the core abstraction layer that allows the frontend to work with simple task durations while maintaining compatibility with Timr's time slot requirements.
+
+### Authentication with Timr.com
+
+Task Timr uses the OAuth2 authorization code flow with PKCE of the Timr.com API v1:
+
+1. `GET /login` redirects the browser to the Timr.com login page.
+2. After the login, Timr.com redirects back to `GET /oauth/callback`, where the backend
+   exchanges the authorization code for an access token and a refresh token, determines
+   the Timr.com user ID via the OpenID Connect userinfo endpoint and loads the user.
+3. Tokens, user ID and name are kept in the signed (not encrypted) Flask session cookie,
+   which is marked `Secure` when the redirect URI uses HTTPS. `get_current_user()`
+   refreshes the access token shortly before it expires and authorizes the `TimrApi`
+   client for the request; if the access token has expired and cannot be refreshed, the
+   user has to log in again. Timr.com rotates refresh tokens, so a refresh of concurrent
+   requests may fail while the access token is still valid; this is tolerated.
+4. `GET /logout` clears the session and revokes the refresh token.
+
+All requests to the Timr.com API therefore run with the permissions of the logged-in
+user. Tasks are retrieved via `/users/{id}/tasks`, which returns exactly the tasks the
+user may book on; the API filters bookable tasks which are active today, including
+end dates inherited from closed parent tasks.
+
+Timr.com reports API errors as RFC 9457 problem details. `TimrApi` uses the `detail`
+and field-level `errors` as error message and keeps the problem `type` URI in
+`TimrApiError.problem_type` for detecting specific error conditions.
 
 ### Time Slot Handling Overview
 

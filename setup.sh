@@ -76,13 +76,16 @@ if [ ! -f ".env.example" ]; then
 SESSION_SECRET=your-production-session-secret-here
 
 # Timr.com Configuration
-# Your company ID in Timr.com
+# Your company ID in Timr.com (used for linking to the Timr.com web application)
 TIMR_COMPANY_ID=ohrnerit
 
-# Task List Access Credentials
-# Timr.com user account with task list access permissions
-TASKLIST_TIMR_USER=your-tasklist-user@company.com
-TASKLIST_TIMR_PASSWORD=your-tasklist-password
+# Timr.com OAuth2 Login
+# OAuth client with grant type "Authorization Code", created in Timr.com under
+# Administration > Settings > Integrations > API Credentials.
+# The redirect URI must exactly match a redirect URL configured for the client.
+TIMR_OAUTH_CLIENT_ID=your-oauth-client-id@company.timr.com
+TIMR_OAUTH_CLIENT_SECRET=your-oauth-client-secret
+TIMR_OAUTH_REDIRECT_URI=http://localhost:5000/oauth/callback
 
 # Optional Configuration
 # Flask environment (development, production)

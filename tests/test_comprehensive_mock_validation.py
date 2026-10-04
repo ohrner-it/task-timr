@@ -4,69 +4,37 @@ Comprehensive mock validation tests using the new validation framework.
 
 import unittest
 import json
-import os
-from timr_api import TimrApi
-from config import COMPANY_ID
 from tests.utils import (
     MockValidator, validate_mock_against_real, extract_structure_template,
-    REALISTIC_LOGIN_RESPONSE, REALISTIC_WORKING_TIME, REALISTIC_WORKING_TIME_TYPE,
-    REALISTIC_TASK, REALISTIC_PROJECT_TIME
+    REALISTIC_WORKING_TIME, REALISTIC_WORKING_TIME_TYPE, REALISTIC_TASK
 )
+from tests.utils.integration import create_integration_api
 
 
 class TestComprehensiveMockValidation(unittest.TestCase):
-    """Comprehensive validation of mocks against real API responses."""
-    
+    """
+    Comprehensive validation of mocks against real API responses.
+
+    The real API comparisons use the integration test configuration (see
+    tests/utils/integration.py). REALISTIC_USER is not validated here: it mirrors
+    GET /users/{id} with the user's own token, while the client credentials token
+    available to tests sees additional administrative user fields.
+    """
+
     @classmethod
     def setUpClass(cls):
         """Set up integration test capability if credentials available."""
-        cls.username = os.environ.get("TIMR_USER")
-        cls.password = os.environ.get("TIMR_PASSWORD")
-        cls.has_credentials = bool(cls.username and cls.password)
-        
-        if cls.has_credentials:
-            cls.api = TimrApi(company_id=COMPANY_ID)
-    
-    def test_login_response_comprehensive_validation(self):
-        """Comprehensive validation of login response mock."""
-        if not self.has_credentials:
-            self.skipTest("No credentials available for real API comparison")
-            
-        # Get real API response
-        real_response = self.api.login(self.username, self.password)
-        
-        # Validate our realistic mock against real response
-        report = validate_mock_against_real(
-            REALISTIC_LOGIN_RESPONSE, 
-            real_response, 
-            "login_response"
-        )
-        
-        print("\n" + "="*80)
-        print("LOGIN RESPONSE VALIDATION")
-        print("="*80)
-        print(report)
-        
-        # Use validator to check for critical issues
-        validator = MockValidator()
-        validator.validate_structure(REALISTIC_LOGIN_RESPONSE, real_response, "login_response")
-        
-        # Assert no critical issues (warnings are acceptable)
-        critical_issues = validator.get_critical_issues()
-        if critical_issues:
-            critical_details = "\n".join([
-                f"- {issue.path}: {issue.issue}" for issue in critical_issues
-            ])
-            self.fail(f"Critical mock validation issues found:\n{critical_details}")
-    
+        try:
+            cls.api = create_integration_api()
+        except unittest.SkipTest:
+            cls.api = None
+        cls.has_credentials = cls.api is not None
+
     def test_working_time_comprehensive_validation(self):
         """Comprehensive validation of working time mock."""
         if not self.has_credentials:
             self.skipTest("No credentials available for real API comparison")
-            
-        # Login first
-        self.api.login(self.username, self.password)
-        
+
         # Get real working times
         real_working_times = self.api.get_working_times()
         
@@ -103,7 +71,7 @@ class TestComprehensiveMockValidation(unittest.TestCase):
         if not self.has_credentials:
             self.skipTest("No credentials available for real API comparison")
             
-        # Get real working time types (no login required)
+        # Get real working time types
         real_wt_types = self.api.get_working_time_types()
         
         if not real_wt_types:
@@ -139,11 +107,8 @@ class TestComprehensiveMockValidation(unittest.TestCase):
         if not self.has_credentials:
             self.skipTest("No credentials available for real API comparison")
             
-        # Login first
-        self.api.login(self.username, self.password)
-        
         # Get real tasks
-        real_tasks = self.api.get_tasks()
+        real_tasks = self.api.get_bookable_tasks()
         
         if not real_tasks:
             self.skipTest("No tasks available for validation")
@@ -182,12 +147,6 @@ class TestComprehensiveMockValidation(unittest.TestCase):
         print("STRUCTURE TEMPLATES FROM REAL API")
         print("="*80)
         
-        # Login
-        login_response = self.api.login(self.username, self.password)
-        login_template = extract_structure_template(login_response)
-        print("\n### LOGIN RESPONSE TEMPLATE:")
-        print(json.dumps(login_template, indent=2))
-        
         # Working times
         working_times = self.api.get_working_times()
         if working_times:
@@ -203,7 +162,7 @@ class TestComprehensiveMockValidation(unittest.TestCase):
             print(json.dumps(wtt_template, indent=2))
         
         # Tasks
-        tasks = self.api.get_tasks()
+        tasks = self.api.get_bookable_tasks()
         if tasks:
             task_template = extract_structure_template(tasks[0])
             print("\n### TASK TEMPLATE:")
@@ -215,30 +174,19 @@ class TestComprehensiveMockValidation(unittest.TestCase):
             self.skipTest("No credentials available for real API comparison")
             
         # Example of old-style simple mock
-        old_login_mock = {
-            'token': 'test-token',
-            'user': {'id': 'user1', 'fullname': 'Test User'}
-        }
-        
         old_working_time_mock = {
             'id': 'wt1',
             'start': '2025-04-01T09:00:00Z',
             'end': '2025-04-01T17:00:00Z'
         }
-        
+
         # Get real responses
-        real_login = self.api.login(self.username, self.password)
         real_working_times = self.api.get_working_times()
-        
+
         print("\n" + "="*80)
         print("OLD MOCK VALIDATION (SHOWS PROBLEMS)")
         print("="*80)
-        
-        # Validate old login mock
-        print("\n### OLD LOGIN MOCK VALIDATION:")
-        old_login_report = validate_mock_against_real(old_login_mock, real_login, "old_login_mock")
-        print(old_login_report)
-        
+
         # Validate old working time mock
         if real_working_times:
             print("\n### OLD WORKING TIME MOCK VALIDATION:")

@@ -2,7 +2,7 @@
 Reference mock data structures that accurately match Timr API responses.
 
 This module provides realistic mock data templates validated against real API responses:
-- Login responses with proper user data structure
+- User objects as returned by GET /users/{id}
 - Working time objects with complete field coverage
 - Task objects with all required fields
 - Project time entries
@@ -12,20 +12,20 @@ All mock data uses proper UUID formats and realistic field values.
 These templates ensure tests accurately reflect production API behavior.
 """
 
-# Realistic login response mock
-REALISTIC_LOGIN_RESPONSE = {
-    "token": "12345678-1234-1234-1234-123456789abc",
-    "alias": None,
-    "valid_until": None,
-    "user": {
-        "id": "87654321-4321-4321-4321-cba987654321",
-        "firstname": "Test",
-        "lastname": "User",
-        "fullname": "Test User",
-        "email": "test@example.com",
-        "employee_number": "EMP001",
-        "external_id": "EXT001"
-    }
+# Realistic user object mock (GET /users/{id} with the user's own access token)
+REALISTIC_USER = {
+    "id": "87654321-4321-4321-4321-cba987654321",
+    "firstname": "Test",
+    "lastname": "User",
+    "fullname": "Test User",
+    "email": "test@example.com",
+    "employee_number": "EMP001",
+    "external_id": "EXT001",
+    "holiday_calendar": {
+        "id": "f929d979-a27c-446d-8541-c973c14cbee3",
+        "description": "Deutschland: Baden-Württemberg"
+    },
+    "vacation_year_start": "--01-01"
 }
 
 # Realistic working time object mock
@@ -42,7 +42,7 @@ REALISTIC_WORKING_TIME = {
         }
     ],
     "duration": {
-        "type": "time_tracking",
+        "type": "minutes",
         "minutes": 450,
         "minutes_rounded": 450
     },
@@ -62,10 +62,7 @@ REALISTIC_WORKING_TIME = {
         "name": "Regular Work",
         "external_id": ""
     },
-    "working_time_date_span": {
-        "id": "12345678-abcd-1234-abcd-123456789abc"
-    },
-    "working_time_request": None,
+    "working_time_date_span": None,
     "start_location": None,
     "end_location": None,
     "start_platform": "timr_web",
@@ -93,9 +90,7 @@ REALISTIC_WORKING_TIME_TYPE = {
     "edit_unit": "minutes",
     "category": "attendance_time",
     "sub_category": "present",
-    "recording_mode_user": None,
-    "non_creditable_deductible": 0,
-    "compensation_deductible": None,
+    "recording_mode_user": "allowed",
     "archived": False,
     "requires_substitute": False
 }
@@ -111,47 +106,36 @@ REALISTIC_WORKING_TIME_TYPE_VACATION = {
     "category": "vacation",
     "sub_category": None,
     "recording_mode_user": "allowed",
-    "non_creditable_deductible": 0,
-    "compensation_deductible": None,
     "archived": False,
     "requires_substitute": False
 }
 
-# Realistic task object mock
+# Realistic task object mock (GET /users/{id}/tasks returns this reduced task shape)
 REALISTIC_TASK = {
     "id": "abcdefab-1234-5678-9abc-def123456789",
     "name": "Test Task",
-    "description": "A test task for validation",
+    "breadcrumbs": "Test Customer/Test Project/Test Task",
     "external_id": "TASK-001",
-    "bookable": True,
-    # Fields identified as missing in real API
-    "project_time_notes_required": False,
-    "earliest_start_time": None,
-    "end_date": None,
-    "custom_field_1": "",
-    "breadcrumbs": "Test Customer > Test Project > Test Task",
-    "active_from": None,
-    "billable": True,
-    "location_restriction_radius_meters": None,
-    "start_date": None,
-    "active_to": None,
-    "latest_end_time": None,
-    "parent_task": None,
-    "custom_field_2": "",
-    "location_inherited": False,
-    "custom_field_3": "",
-    "lock_date": None,
-    "location": {
-        "address": "",
-        "zip_code": "",
-        "state": "",
-        "lat": None,
-        "city": "",
-        "country": "",
-        "lon": None
+    "parent_task": {
+        "id": "fedcbafe-4321-8765-cba9-987654321fed",
+        "name": "Test Project",
+        "breadcrumbs": "Test Customer/Test Project",
+        "external_id": None
     },
-    "description_external": ""
-    # Note: Removed 'archived', 'project', 'customer' fields as they were extra fields not in real API
+    "description": "A test task for validation",
+    "bookable": True,
+    "billable": True,
+    "project_time_notes_required": False,
+    "lock_date": None,
+    "active_from": None,
+    "active_to": None,
+    "budget_planning_type": "none",
+    "location_inherited": True,
+    "location": None,
+    "location_restriction_radius_meters": None,
+    "custom_field_1": None,
+    "custom_field_2": None,
+    "custom_field_3": None
 }
 
 # Realistic project time object mock
@@ -159,14 +143,27 @@ REALISTIC_PROJECT_TIME = {
     "id": "dddddddd-eeee-ffff-aaaa-bbbbbbbbbbbb",
     "start": "2025-04-01T09:00:00+00:00",
     "end": "2025-04-01T11:00:00+00:00",
+    "break_time_total_minutes": 0,
+    "break_times": [],
+    "duration": {
+        "type": "minutes",
+        "minutes": 120,
+        "minutes_rounded": 120
+    },
     "status": "changeable",
     "changed": True,
     "notes": "Test project time",
     "task": {
         "id": "abcdefab-1234-5678-9abc-def123456789",
         "name": "Test Task",
+        "breadcrumbs": "Test Customer/Test Project/Test Task",
         "external_id": "TASK-001"
     },
+    "billable": True,
+    "start_location": None,
+    "end_location": None,
+    "start_platform": "timr_web",
+    "end_platform": "timr_web",
     "user": {
         "id": "87654321-4321-4321-4321-cba987654321",
         "firstname": "Test",
@@ -185,38 +182,6 @@ REALISTIC_PROJECT_TIME = {
         "email": "test@example.com",
         "employee_number": "EMP001",
         "external_id": "EXT001"
-    }
-}
-
-# Error response structures based on common patterns
-TIMR_API_ERROR_RESPONSES = {
-    "unauthorized": {
-        "status_code": 401,
-        "message": "Invalid username or password.",
-        "error_code": "UNAUTHORIZED"
-    },
-    "not_found": {
-        "status_code": 404,
-        "message": "The requested resource was not found.",
-        "error_code": "NOT_FOUND"
-    },
-    "validation_error": {
-        "status_code": 400,
-        "message": "Validation failed",
-        "error_code": "VALIDATION_ERROR",
-        "details": {
-            "field": "start",
-            "message": "Start time is required"
-        }
-    },
-    "business_rule_violation": {
-        "status_code": 422,
-        "message": "Business rule violation",
-        "error_code": "BUSINESS_RULE_VIOLATION",
-        "details": {
-            "rule": "working_time_overlap",
-            "message": "Working time overlaps with existing entry"
-        }
     }
 }
 
@@ -275,6 +240,6 @@ def create_task_variant(**overrides):
 
 def create_user_variant(**overrides):
     """Create a user object with specified field overrides"""
-    user = REALISTIC_LOGIN_RESPONSE["user"].copy()
+    user = REALISTIC_USER.copy()
     user.update(overrides)
     return user
