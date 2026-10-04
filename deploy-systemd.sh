@@ -210,8 +210,9 @@ BIND_IP=${BIND_IP}
 PORT=${PORT}
 EOF
 
-# Create systemd service file without embedded secrets
-cat > /tmp/task-timr.service <<EOF
+# Create systemd service file without embedded secrets, written directly to its
+# destination (no temporary file another local user could tamper with)
+cat <<EOF | sudo install -m 644 -o root -g root /dev/stdin /etc/systemd/system/task-timr.service
 [Unit]
 Description=Task Timr - Task duration-focused alternative frontend to Timr.com
 After=network.target
@@ -247,10 +248,6 @@ LimitNPROC=4096
 [Install]
 WantedBy=multi-user.target
 EOF
-
-# Set proper permissions and move service file
-chmod 644 /tmp/task-timr.service
-sudo mv /tmp/task-timr.service /etc/systemd/system/task-timr.service
 
 echo "🔄 Reloading systemd configuration..."
 sudo systemctl daemon-reload
